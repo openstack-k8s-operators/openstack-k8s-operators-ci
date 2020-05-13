@@ -13,6 +13,9 @@ before_script:
 install:
   - go get -t -v ./...
 
+script:
+  - ./openstack-k8s-operators-ci/test-runner/gotest.sh
+
 jobs:
   include:
     - stage: "lintvet"

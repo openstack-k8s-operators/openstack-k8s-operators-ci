@@ -15,7 +15,6 @@ done
 
 if [[ $DOCKERFILE_CHANGED == False ]]; then
   echo "Dockerfile did not change, no build nessessary."
-  travis_terminate 0
   exit 1
 else
   echo "Dockerfile was changed, continuing with build."

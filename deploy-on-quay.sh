@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Copyright (c) 2018 Lars Kiesow <lkiesow@uos.de>
 # https://github.com/lkiesow/automated-quay.io-deployment

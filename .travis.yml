@@ -12,7 +12,7 @@ jobs:
       name: Container Build
 
       # only want to run when code is merged to master branch
-      if: $TRAVIS_PULL_REQUEST == "false" && $TRAVIS_BRANCH == "master"
+      if: type != pull_request AND branch = master
 
       # run preflight script which will exit Travis if Dockerfile is unchanged
       before_script:

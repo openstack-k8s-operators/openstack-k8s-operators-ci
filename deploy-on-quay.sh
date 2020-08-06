@@ -7,13 +7,15 @@
 
 set -ue
 
+# generate payload
 payload="{
   \"commit\": \"${TRAVIS_COMMIT}\",
   \"ref\": \"refs/heads/${TRAVIS_BRANCH}\",
   \"default_branch\": \"${QUAY_DEFAULT_BRANCH:-master}\"
 }"
 
-# Fix webhook URL if necessary
+# fix webhook URL if necessary
 QUAY_WEBHOOK_URL="$(echo "${QUAY_WEBHOOK_URL}" | sed "s_https://:_https://\$token:_")"
 
+# update container on quay.io
 curl -H 'Content-Type: application/json' --data "${payload}" "${QUAY_WEBHOOK_URL}"

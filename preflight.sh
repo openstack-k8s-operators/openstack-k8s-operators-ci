@@ -6,7 +6,7 @@ DOCKERFILE=openstack-k8s-builder-toolbox
 DOCKERFILE_CHANGED=False
 echo "Comparing: $TRAVIS_COMMIT_RANGE"
 CHANGED_FILES=`git diff --name-only $TRAVIS_COMMIT_RANGE`
-echo "Detected the following changed files: $CHANGED_FILES"
+echo -e "Detected the following changed files:\n$CHANGED_FILES"
 
 for CHANGED_FILE in $CHANGED_FILES; do
   if [[ $CHANGED_FILE == $DOCKERFILE ]]; then

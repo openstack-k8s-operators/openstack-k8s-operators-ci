@@ -1,11 +1,12 @@
 FROM centos:8 AS openstack-k8s-operators-build-toolkit
- 
+
 ARG OPENSTACK_K8S_SRC_DIR=/tmp/openstack-k8s
 ARG OPERATOR_SDK_REPO="github.com/operator-framework"
 ENV OPERATOR_SDK_GIT_TAG=0.18.2
 ENV OPERATOR_SDK_NAME="operator-sdk"
 ARG OPM_RELEASE="https://github.com/operator-framework/operator-registry/releases/latest/download/linux-amd64-opm"
- 
+
+# Install dependencies
 RUN dnf install -y \
   podman \
   buildah \
@@ -13,7 +14,7 @@ RUN dnf install -y \
   make \
   golang \
   && dnf clean all
- 
+
 # Install operator-sdk
 RUN mkdir -p ${OPENSTACK_K8S_SRC_DIR}/src/${OPERATOR_SDK_REPO} \
     && pushd ${OPENSTACK_K8S_SRC_DIR}/src/${OPERATOR_SDK_REPO} \
@@ -22,5 +23,5 @@ RUN mkdir -p ${OPENSTACK_K8S_SRC_DIR}/src/${OPERATOR_SDK_REPO} \
     && GO111MODULE=on make install \
     && curl -L ${OPM_RELEASE} --output /usr/local/bin/opm \
     && chmod a+x /usr/local/bin/opm
- 
+
 ENV PATH=$PATH:/root/go/bin/

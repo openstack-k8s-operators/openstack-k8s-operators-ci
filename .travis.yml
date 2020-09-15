@@ -1,22 +1,26 @@
 ---
 language: generic
 
+sudo: false
+
+git:
+  depth: 2
+
+jobs:
+  include:
+    - stage: build
+      name: Container Build
+
+      # only want to run when code is merged to master branch
+      if: type != pull_request AND branch = master
+
+      # run preflight script which will exit Travis if Dockerfile is unchanged
+      before_script:
+        - ./preflight.sh || travis_terminate 0
+
+      # if stage passes preflight push new container to quay
+      script:
+        - ./deploy-on-quay.sh
+
 stages:
-  - name: build
-
-    # only want to run when code is merged to master branch
-    if: branch = master
-
-    # stage config
-    sudo: false
-    git:
-      depth: 2
-
-    # clone CI repo and run preflight script which will exit Travis if Dockerfile is unchanged
-    before_script:
-      - git clone --depth=2 https://github.com/openstack-k8s-operators/openstack-k8s-operators-ci.git
-      - ./openstack-k8s-operators-ci/preflight.sh
-
-    # if stage passes prelight push new container to quay
-    script:
-      - ./openstack-k8s-operators-ci/deploy-on-quay.sh
+  - build

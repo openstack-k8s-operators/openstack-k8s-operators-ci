@@ -2,9 +2,11 @@
 
 set -e
 
-CHANGED_FILES=`git diff --name-only master...${TRAVIS_COMMIT}`
-DOCKERFILE_CHANGED=False
 DOCKERFILE=openstack-k8s-builder-toolbox
+DOCKERFILE_CHANGED=False
+echo "Comparing: $TRAVIS_COMMIT_RANGE"
+CHANGED_FILES=`git diff --name-only $TRAVIS_COMMIT_RANGE`
+echo -e "Detected the following changed files:\n$CHANGED_FILES"
 
 for CHANGED_FILE in $CHANGED_FILES; do
   if [[ $CHANGED_FILE == $DOCKERFILE ]]; then
@@ -15,7 +17,6 @@ done
 
 if [[ $DOCKERFILE_CHANGED == False ]]; then
   echo "Dockerfile did not change, no build nessessary."
-  travis_terminate 0
   exit 1
 else
   echo "Dockerfile was changed, continuing with build."

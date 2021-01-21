@@ -9,4 +9,4 @@ curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/insta
 
 go mod vendor
 
-./bin/golangci-lint run -v
+GOLANGCI_LINT_CACHE=/tmp/golangci-cache ./bin/golangci-lint run -v

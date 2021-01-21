@@ -2,7 +2,7 @@
 set -ex
 
 # Get golint
-go get -u golang.org/x/lint/golint
+go get -mod=readonly golang.org/x/lint/golint
 
 # Set to "" if lint errors should not fail the job (default golint behaviour)
 # "-set_exit_status" otherwise

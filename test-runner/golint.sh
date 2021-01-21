@@ -16,4 +16,6 @@ LINT_EXIT_STATUS="-set_exit_status"
 BASE_DIR="$(dirname $0)"
 cd "${BASE_DIR}/../.."
 
+[ -d "vendor" ] && rm -rf vendor
+
 golint ${LINT_EXIT_STATUS} ./...

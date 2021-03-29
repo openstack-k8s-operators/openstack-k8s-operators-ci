@@ -4,14 +4,13 @@ declare -A OSBS_VARS
 
 ###########
 OSBS_VARS=(
-    [GOLANG_BUILDER]=openshift/golang-builder:1.13
+    [GOLANG_BUILDER]=openshift/golang-builder:1.14
     [OPERATOR_BASE_IMAGE]=registry.redhat.io/ubi8/ubi-minimal:latest
-    [REMOTE_SOURCE]=.
-    # Unset arg
-    [REMOTE_SOURCE_DIR]=
+    [REMOTE_SOURCE]=unpacked_remote_sources
+    [REMOTE_SOURCE_DIR]=/remote-source
     [REMOTE_SOURCE_SUBDIR]=app
     [DEST_ROOT]=/dest-root
-    [GO_BUILD_EXTRA_ARGS]='"-mod readonly -v "'
+    [GO_BUILD_EXTRA_ARGS]='"-mod readonly "'
 )
 ###########
 

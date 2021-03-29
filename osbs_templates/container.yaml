@@ -1,0 +1,15 @@
+---
+compose:
+  pulp_repos: true
+
+platforms:
+  # all these keys are optional
+  only:
+    - x86_64   # can be a list (as here) or a string (as below)
+
+image_build_method: imagebuilder
+remote_source:
+  repo:
+  ref:
+  pkg_managers:
+    - gomod

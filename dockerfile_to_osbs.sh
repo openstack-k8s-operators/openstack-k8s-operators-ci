@@ -4,17 +4,20 @@ declare -A OSBS_VARS
 
 ###########
 OSBS_VARS=(
+    # osp-director-operator
     [GOLANG_BUILDER]=openshift/golang-builder:1.14
     [OPERATOR_BASE_IMAGE]=registry.redhat.io/ubi8/ubi-minimal:latest
-    # unpacked_remote_sources is default by cachito
-    [REMOTE_SOURCE]=unpacked_remote_sources
-    [REMOTE_SOURCE_DIR]=/remote-source
     [REMOTE_SOURCE_SUBDIR]=app
-    [DEST_ROOT]=/dest-root
-    [GO_BUILD_EXTRA_ARGS]='"-mod readonly "'
+    [GO_BUILD_EXTRA_ARGS]='"-mod readonly -v "'
+    [USER_ID]=
+    # osp-director-downloader
     [IMAGE_DOWNLOADER_BASE]=ubi8:latest
     [PKG_CMD]=dnf
     [ENTRYPOINT_PATH]=app/containers/image_downloader/entrypoint.sh
+    # Unset args passed via Cachito / multiple images
+    [CACHITO_ENV_FILE]=
+    [REMOTE_SOURCE_DIR]=
+    [REMOTE_SOURCE]=
 )
 ###########
 
@@ -32,10 +35,10 @@ function inline_dockerfile_replace() {
     then
         # Ensure ARG does not contain value
         echo "Unsetting argument: ${argname}"
-        sed -i "/^ARG *${argname}[\n|=]/cARG ${argname}" ${dockerfile}
+        sed -i "/^ARG *${argname}=/cARG ${argname}=" ${dockerfile}
     else
         echo "Setting: ${argname}=${argvalue}"
-        sed -i "/^ARG *${argname}[\n|=]/cARG ${argname}=${argvalue}" ${dockerfile}
+        sed -i "/^ARG *${argname}=/cARG ${argname}=${argvalue}" ${dockerfile}
     fi
 }
 

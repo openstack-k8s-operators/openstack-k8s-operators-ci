@@ -5,7 +5,7 @@ declare -A OSBS_VARS
 ###########
 OSBS_VARS=(
     # osp-director-operator
-    [GOLANG_BUILDER]=openshift/golang-builder:1.14
+    [GOLANG_BUILDER]=openshift/golang-builder:1.16
     [OPERATOR_BASE_IMAGE]=registry.redhat.io/ubi8/ubi-minimal:latest
     [REMOTE_SOURCE_SUBDIR]=app
     [GO_BUILD_EXTRA_ARGS]='"-mod readonly -v "'

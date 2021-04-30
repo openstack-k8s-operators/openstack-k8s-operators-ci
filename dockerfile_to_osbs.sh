@@ -35,7 +35,7 @@ function inline_dockerfile_replace() {
     then
         # Ensure ARG does not contain value
         echo "Unsetting argument: ${argname}"
-        sed -i "/^ARG *${argname}=/cARG ${argname}=" ${dockerfile}
+        sed -i "/^ARG *${argname}=/cARG ${argname}" ${dockerfile}
     else
         echo "Setting: ${argname}=${argvalue}"
         sed -i "/^ARG *${argname}=/cARG ${argname}=${argvalue}" ${dockerfile}

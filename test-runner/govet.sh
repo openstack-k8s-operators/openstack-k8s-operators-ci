@@ -6,4 +6,4 @@ cd "${BASE_DIR}/../.."
 
 go mod vendor
 
-go vet ./...
+go list ./... | grep -v vendor | xargs go vet

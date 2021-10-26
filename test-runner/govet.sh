@@ -4,6 +4,6 @@ set -ex
 BASE_DIR="$(dirname $0)"
 cd "${BASE_DIR}/../.."
 
-go mod vendor
+[ -d "vendor" ] && rm -rf vendor
 
 go vet ./...

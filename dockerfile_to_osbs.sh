@@ -1,6 +1,5 @@
 #!/bin/bash
 
-declare -A OSBS_VARS
 declare -A OSBS_VARS_DIR="$(dirname "$0")/osbs_dockerfile_vars"
 declare -A OSBS_SCRIPT_DIR="osbs_dockerfile_template_scripts"
 declare -A TEMPLATE_TAG_START="### DO NOT EDIT LINES BELOW"

@@ -246,7 +246,6 @@ check_if_branch_exists "$operator_branch"
 
 TMP_DIR=$(mktemp -d -t tmp.XXXXX_Operator_SDK)
 
-#TBD: uncomment
 download_operator_sdk ${TMP_DIR} && echo $OPERATOR_SDK
 
 # Clone repositories if they were not passed as args
@@ -307,3 +306,4 @@ popd
 
 echo "Temporary directory with operator-sdk, repos is at: ${TMP_DIR}"
 echo "Your ready to git-review changes are in the: ${downstream_local_dir}"
+echo "${TMP_DIR}"

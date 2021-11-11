@@ -164,7 +164,7 @@ function generate_new_bundle() {
 
     pushd "${UPSTREAM_DIRECTORY}"
         export PATH=${OPERATOR_SDK}:$PATH
-        VERSION=$RELEASE_VERSION IMG=$OPERATOR_IMG make bundle
+        VERSION=$RELEASE_VERSION IMG=$OPERATOR_IMG make bundle || exit 2
     popd
 }
 
@@ -175,7 +175,7 @@ function copy_new_bundle() {
     local DOWNSTREAM_BUNDLE_DIR="${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-operator-bundle/"
     pushd "${DOWNSTREAM_BUNDLE_DIR}"
         git rm -r bundle
-        cp -a "${UPSTREAM_DIRECTORY}/bundle" .
+        cp -a "${UPSTREAM_DIRECTORY}/bundle" .  || exit 2
 
         # HACKs for webhook deployment to work around: https://bugzilla.redhat.com/show_bug.cgi?id=1921000
         # TODO: Figure out how to do this via Kustomize so that it's automatically rolled into the make
@@ -287,9 +287,9 @@ RELEASE_VERSION=$(grep IMAGE_VERSION "${downstream_local_dir}/distgit/containers
 
 IMAGE_TAG=$(get_current_operator_version "$RELEASE_VERSION" "$operator_branch") || { echo "$IMAGE_TAG"; exit -1; }
 
-generate_new_bundle "$upstream_local_dir" "$operator_branch" "$IMAGE_TAG"
+generate_new_bundle "$upstream_local_dir" "$operator_branch" "$IMAGE_TAG" || { echo "Make bundle failed"; exit -1; }
 
-copy_new_bundle "$upstream_local_dir" "$downstream_local_dir"
+copy_new_bundle "$upstream_local_dir" "$downstream_local_dir" || { echo "Copying bundle failed"; exit -1; }
 
 # It needs to be separate from translate_dockerfiles
 translate_bundle_dockerfile "$upstream_local_dir" "$downstream_local_dir" "$operator_branch"

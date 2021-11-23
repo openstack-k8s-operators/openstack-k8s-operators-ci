@@ -13,11 +13,11 @@ BUNDLE_REGISTRY_USERNAME=${BUNDLE_REGISTRY_USERNAME:-"6340056|OSPDirectorOperato
 declare -A upstream_to_downstream
 declare -A upstream_to_downstream_img
 # master branch
-upstream_to_downstream[master]=rhos-17.0-rhel-8
-upstream_to_downstream_img[master]=  # TBD We don't have yet one for master
-# osp16_tech_preview branch
-upstream_to_downstream[osp16_tech_preview]=rhos-16.2-rhel-8
-upstream_to_downstream_img[osp16_tech_preview]="${BUNDLE_IMG_REGISTRY}/rhosp-rhel8-tech-preview/"
+upstream_to_downstream[master]=rhos-16.2-rhel-8
+upstream_to_downstream_img[master]= "${BUNDLE_IMG_REGISTRY}/rhosp-rhel8-tech-preview/"
+# osp16_tech_preview branch is not used in osbs
+upstream_to_downstream[osp16_tech_preview]=
+upstream_to_downstream_img[osp16_tech_preview]=
 
 UPSTREAM_GIT_REPO="https://github.com/openstack-k8s-operators/osp-director-operator.git"
 

@@ -15,8 +15,7 @@ function backup_dockerfile() {
 function get_available_operators() {
     # Available operators are determined by the list of .env files in the
     # folder that consists of all vars
-    local basedir=$(dirname "$0")
-    available_operators=$(basename -s .env ${basedir}/${OSBS_VARS_DIR}/*.env | grep -v default)
+    available_operators=$(basename -s .env ${OSBS_VARS_DIR}/*.env | grep -v default)
     echo "$available_operators"
 }
 
@@ -39,12 +38,11 @@ function check_if_operator_exists() {
 }
 
 function print_help() {
-    printf "\nUsage: $0 [OPTION]... -f Dockerfile\n\n"
+    printf "\nUsage: $0 [OPTION]... -n <OSBS operator name> -f Dockerfile\n\n"
     printf "\tStartup:\n"
     printf "\t  -h\tprint this help\n"
     printf "\n\tOptions:\n"
     printf "\t  -b\tupstream operator branch\n"
-    printf "\t  -n\tOSBS operator name\n"
 
     exit 2
 }

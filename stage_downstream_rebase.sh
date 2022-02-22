@@ -105,16 +105,22 @@ function translate_dockerfiles() {
 
     cp "${UPSTREAM_DIRECTORY}/Dockerfile" \
            "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-operator/Dockerfile.in"
-    cp "${UPSTREAM_DIRECTORY}/Dockerfile.provision-ip-discovery-agent" \
-           "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-provisioner/Dockerfile.in"
     cp "${UPSTREAM_DIRECTORY}/containers/image_downloader/Dockerfile" \
            "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-downloader/Dockerfile.in"
 
-
     ./dockerfile_to_osbs.sh -n osp-director-operator -b "${GIT_BRANCH}" -f  "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-operator/Dockerfile.in" || exit -1
-    ./dockerfile_to_osbs.sh -n osp-director-provisioner -b "${GIT_BRANCH}" -f  "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-provisioner/Dockerfile.in" || exit -1
     ./dockerfile_to_osbs.sh -n osp-director-downloader -b "${GIT_BRANCH}" -f  "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-downloader/Dockerfile.in" || exit -1
 
+    if [[ -e "${UPSTREAM_DIRECTORY}/Dockerfile.provision-ip-discovery-agent"  ]]; then
+      cp "${UPSTREAM_DIRECTORY}/Dockerfile.provision-ip-discovery-agent" \
+           "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-provisioner/Dockerfile.in"
+      ./dockerfile_to_osbs.sh -n osp-director-provisioner -b "${GIT_BRANCH}" -f  "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-provisioner/Dockerfile.in" || exit -1
+    fi
+    if [[ -e "${UPSTREAM_DIRECTORY}/Dockerfile.agent"  ]]; then
+      cp "${UPSTREAM_DIRECTORY}/Dockerfile.agent" \
+           "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-operator-agent/Dockerfile.in"
+      ./dockerfile_to_osbs.sh -n osp-director-operator-agent -b "${GIT_BRANCH}" -f  "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-operator-agent/Dockerfile.in" || exit -1
+    fi
 }
 
 function translate_bundle_dockerfile() {

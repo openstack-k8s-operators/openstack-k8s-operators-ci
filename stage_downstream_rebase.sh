@@ -118,8 +118,8 @@ function translate_dockerfiles() {
     fi
     if [[ -e "${UPSTREAM_DIRECTORY}/Dockerfile.agent"  ]]; then
       cp "${UPSTREAM_DIRECTORY}/Dockerfile.agent" \
-           "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-operator-agent/Dockerfile.in"
-      ./dockerfile_to_osbs.sh -n osp-director-operator-agent -b "${GIT_BRANCH}" -f  "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-operator-agent/Dockerfile.in" || exit -1
+           "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-agent/Dockerfile.in"
+      ./dockerfile_to_osbs.sh -n osp-director-agent -b "${GIT_BRANCH}" -f  "${DOWNSTREAM_DIRECTORY}/distgit/containers/osp-director-agent/Dockerfile.in" || exit -1
     fi
 }
 

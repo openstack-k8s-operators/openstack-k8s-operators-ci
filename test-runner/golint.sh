@@ -11,6 +11,7 @@ cd "${BASE_DIR}/../.."
 [ -d "vendor" ] && rm -rf vendor
 
 # Get golint
+go mod download golang.org/x/lint
 go install golang.org/x/lint/golint
 
 golint ${LINT_EXIT_STATUS} ./...

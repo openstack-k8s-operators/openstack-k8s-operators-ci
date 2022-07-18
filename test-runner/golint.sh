@@ -8,8 +8,14 @@ LINT_EXIT_STATUS="-set_exit_status"
 BASE_DIR="$(dirname $0)"
 cd "${BASE_DIR}/../.."
 
+MODULE_DIR="."
+if [ -n "$1" ]; then
+    MODULE_DIR=$1
+fi
+
+pushd ${MODULE_DIR}
 go version
 go get -u golang.org/x/lint/golint
 go install golang.org/x/lint/golint
-
 golint ${LINT_EXIT_STATUS} ./...
+popd

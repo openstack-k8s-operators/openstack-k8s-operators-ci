@@ -14,8 +14,11 @@ if [ -n "$1" ]; then
 fi
 
 pushd ${MODULE_DIR}
-go version
-go get -u golang.org/x/lint/golint
+
+export GOFLAGS="-mod=mod"
+
+go get -u -d golang.org/x/lint/golint
 go install golang.org/x/lint/golint
+
 golint ${LINT_EXIT_STATUS} ./...
 popd

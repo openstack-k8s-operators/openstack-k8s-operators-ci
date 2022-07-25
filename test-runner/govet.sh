@@ -10,5 +10,5 @@ if [ -n "$1" ]; then
 fi
 
 pushd ${MODULE_DIR}
-go vet ./...
+go vet -mod=mod ./...
 popd

@@ -4,6 +4,8 @@ set -ex
 BASE_DIR="$(dirname $0)"
 cd "${BASE_DIR}/../.."
 
+export GOFLAGS="-mod=mod"
+
 # Install golangci
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | bash -x -s --
 
@@ -18,6 +20,6 @@ if [ -n "$2" ] && [ "$2" -ge 1 ]; then
 fi
 
 pushd ${MODULE_DIR}
-go mod vendor
+
 GOGC=10 GOLANGCI_LINT_CACHE=/tmp/golangci-cache ${BASE_DIR}/../../bin/golangci-lint run --timeout=${TIMEOUT}m -v
 popd

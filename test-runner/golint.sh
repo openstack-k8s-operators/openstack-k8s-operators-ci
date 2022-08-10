@@ -17,7 +17,7 @@ pushd ${MODULE_DIR}
 
 export GOFLAGS="-mod=mod"
 
-go get -u -d golang.org/x/lint/golint
+go get -d golang.org/x/lint/golint
 go install golang.org/x/lint/golint
 
 golint ${LINT_EXIT_STATUS} ./...

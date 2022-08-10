@@ -10,7 +10,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.0 # don't bump this until all operators use 1.18
+          go-version: 1.18.0 # now uses 1.18.0 on master
       - name: Checkout project code
         uses: actions/checkout@v2
         with:
@@ -40,6 +40,30 @@ jobs:
         with:
           repository: openstack-k8s-operators/osp-director-operator
           ref: v1.2.x
+      - name: Checkout openstack-k8s-operators-ci project
+        uses: actions/checkout@v2
+        with:
+          path: ./openstack-k8s-operators-ci
+      - name: Run govet.sh
+        run: ./openstack-k8s-operators-ci/test-runner/govet.sh
+      - name: Run golint.sh
+        run: ./openstack-k8s-operators-ci/test-runner/golint.sh
+      - name: Run gotest.sh
+        run: ./openstack-k8s-operators-ci/test-runner/gotest.sh
+
+  testmaster18:
+    name: github (govet, golint and gotest) master Cinder Operator
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18.x
+      - name: Checkout project code
+        uses: actions/checkout@v2
+        with:
+          repository: openstack-k8s-operators/glance-operator
+          ref: master
       - name: Checkout openstack-k8s-operators-ci project
         uses: actions/checkout@v2
         with:

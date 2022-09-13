@@ -52,7 +52,7 @@ jobs:
         run: ./openstack-k8s-operators-ci/test-runner/gotest.sh
 
   testmaster18:
-    name: github (govet, golint and gotest) master Cinder Operator
+    name: github (govet, golint and gotest) master Glance Operator
     runs-on: ubuntu-latest
     steps:
       - name: Install Go

@@ -13,12 +13,11 @@ if [ -n "$1" ]; then
     MODULE_DIR=$1
 fi
 
-pushd ${MODULE_DIR}
-
-export GOFLAGS="-mod=mod"
-
 go get -d golang.org/x/lint/golint
 go install golang.org/x/lint/golint
 
+pushd ${MODULE_DIR}
+
+export GOFLAGS="-mod=mod"
 golint ${LINT_EXIT_STATUS} ./...
 popd

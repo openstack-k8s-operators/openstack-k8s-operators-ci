@@ -10,7 +10,7 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.17.0 # don't bump this until all operators use 1.18
+          go-version: 1.18.0
       - name: Checkout project code
         uses: actions/checkout@v2
         with:

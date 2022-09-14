@@ -13,12 +13,14 @@ if [ -n "$1" ]; then
     MODULE_DIR=$1
 fi
 
-mkdir lint
-pushd lint
-go mod init example.com/lint
-go get -d golang.org/x/lint/golint
-go install golang.org/x/lint/golint
-popd
+if ! command -v golint &> /dev/null; then
+    LINT_INSTALL=$(mktemp -d)
+    pushd "$LINT_INSTALL"
+    go mod init example.com/lint
+    go get -d golang.org/x/lint/golint
+    go install golang.org/x/lint/golint
+    popd
+fi
 
 pushd ${MODULE_DIR}
 export GOFLAGS="-mod=mod"

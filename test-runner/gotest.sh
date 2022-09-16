@@ -10,5 +10,5 @@ if [ -n "$1" ]; then
 fi
 
 pushd ${MODULE_DIR}
-go test -mod=mod -v ./...
+go test -mod=mod -v ./... -args -ginkgo.v
 popd

@@ -10,11 +10,5 @@ if [ -n "$1" ]; then
 fi
 
 pushd ${MODULE_DIR}
-
-ARGS=""
-# not all projects use ginkgo
-if grep ginkgo go.mod &> /dev/null; then
-    ARGS="-ginkgo.v"
-fi
-go test -mod=mod -v ./... -args $ARGS
+go test -mod=mod -v ./...
 popd

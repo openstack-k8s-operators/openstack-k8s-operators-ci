@@ -1,0 +1,397 @@
+name: Build operator images, Install operator, Basic Service tests
+
+on:
+  workflow_call:
+    inputs:
+      operator_name:
+        required: true
+        type: string
+    secrets:
+      RDO_IMAGENAMESPACE:
+        required: true
+      RDO_QUAY_USERNAME:
+        required: true
+      RDO_QUAY_PASSWORD:
+        required: true
+      OS_AUTH_URL:
+        required: true
+      OS_PASSWORD:
+        required: true
+      OS_PROJECT_DOMAIN_ID:
+        required: true
+      OS_PROJECT_NAME:
+        required: true
+      OS_USERNAME:
+        required: true
+      OS_USER_DOMAIN_NAME:
+        required: true
+      SNO_DOMAIN_NAME:
+        required: true
+      SNO_KUBEADMIN_PASSWORD:
+        required: true
+env:
+  imageregistry: 'quay.rdoproject.org'
+  imagenamespace: ${{ secrets.RDO_IMAGENAMESPACE || secrets.RDO_QUAY_USERNAME }}
+
+jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets are set
+        id: have-secrets
+        if: "${{ env.imagenamespace != '' }}"
+        run: echo "::set-output name=ok::true"
+    outputs:
+      have-secrets: ${{ steps.have-secrets.outputs.ok }}
+
+  build-operator:
+    name: Build ${{ inputs.operator_name }} Image
+    runs-on: ubuntu-latest
+    needs: [check-secrets]
+    if: needs.check-secrets.outputs.have-secrets == 'true'
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{  github.event.pull_request.head.sha}}
+
+    - name: Buildah Action
+      id: build-operator
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ inputs.operator_name }}
+        tags: ${{ github.sha }}
+        containerfiles: |
+          ./Dockerfile
+
+    - name: Push ${{ inputs.operator_name }} To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-operator.outputs.image }}
+        tags: ${{ steps.build-operator.outputs.tags }}
+        registry: ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.RDO_QUAY_USERNAME }}
+        password: ${{ secrets.RDO_QUAY_PASSWORD }}
+
+  build-operator-bundle:
+    needs: [ build-operator ]
+    name: Build ${{ inputs.operator_name }}-bundle Image
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.18.x
+
+    - name: Checkout ${{ inputs.operator_name }} repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Install operator-sdk
+      uses: redhat-actions/openshift-tools-installer@v1
+      with:
+        source: github
+        operator-sdk: '1.22.1'
+
+    - name: Create bundle image
+      run: |
+        pushd ${{ github.workspace }}/.github/
+        chmod +x "create_bundle.sh"
+        "./create_bundle.sh"
+        popd
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        GIT_SHA: ${{ github.sha }}
+        BASE_IMAGE: ${{ inputs.operator_name }}
+
+    - name: Build ${{ inputs.operator_name }}-bundle using buildah
+      id: build-operator-bundle
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ inputs.operator_name }}-bundle
+        tags: ${{ github.sha }}
+        containerfiles: |
+          ./bundle.Dockerfile
+          
+    - name: Push ${{ inputs.operator_name }} To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-operator-bundle.outputs.image }}
+        tags: ${{ steps.build-operator-bundle.outputs.tags }}
+        registry:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.RDO_QUAY_USERNAME }}
+        password: ${{ secrets.RDO_QUAY_PASSWORD }}
+
+  build-operator-index:
+    needs: [ check-secrets, build-operator-bundle ]
+    name: ${{ inputs.operator_name }}-index
+    runs-on: ubuntu-latest
+    if: needs.check-secrets.outputs.have-secrets == 'true'
+
+    steps:
+    - name: Checkout ${{ inputs.operator_name }} repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Install opm
+      uses: redhat-actions/openshift-tools-installer@v1
+      with:
+        source: github
+        opm: 'latest'
+
+    - name: Create index image
+      run: |
+        pushd ${{ github.workspace }}/.github/
+        chmod +x "create_opm_index.sh"
+        "./create_opm_index.sh"
+        popd
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        GITHUB_SHA: ${{ github.sha }}
+        BUNDLE_IMAGE: ${{ inputs.operator_name }}-bundle
+        INDEX_IMAGE_TAG: ${{ github.sha }}
+        INDEX_IMAGE: ${{ inputs.operator_name }}-index
+
+    - name: Push ${{ inputs.operator_name }}-index To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ inputs.operator_name }}-index
+        tags: ${{ github.sha }}
+        registry:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.RDO_QUAY_USERNAME }}
+        password: ${{ secrets.RDO_QUAY_PASSWORD }}
+
+  build-openstack-operator:
+    name: Build openstack-operator Image
+    runs-on: ubuntu-latest
+    needs: [build-operator-bundle]
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        repository: openstack-k8s-operators/openstack-operator
+
+    - name: Setup Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.18
+
+    - name: Edit go.mod file
+      run: |
+        pushd ${{ github.workspace }}
+        version=`cat go.mod | grep -m 1 github.com/openstack-k8s-operators/keystone-operator/api | cut -d ' ' -f2`
+        go mod edit --replace github.com/openstack-k8s-operators/${{ inputs.operator_name }}/api@$version=github.com/${{github.event.pull_request.head.repo.full_name}}/api@${{ github.head_ref }}
+        go mod tidy
+        cd ./apis/
+        go mod edit --replace github.com/openstack-k8s-operators/${{ inputs.operator_name }}/api@$version=github.com/${{github.event.pull_request.head.repo.full_name}}/api@${{ github.head_ref }}
+        go mod tidy
+        git diff
+        popd
+
+    - name: Buildah Action
+      id: build-openstack-operator
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: openstack-operator
+        tags: ${{ github.sha }}
+        containerfiles: |
+          ./Dockerfile
+
+    - name: Push openstack-operator To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-openstack-operator.outputs.image }}
+        tags: ${{ steps.build-openstack-operator.outputs.tags }}
+        registry: ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.RDO_QUAY_USERNAME }}
+        password: ${{ secrets.RDO_QUAY_PASSWORD }}
+
+  build-openstack-operator-bundle:
+    needs: [build-openstack-operator]
+    name: Build openstack-operator-bundle Image
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.18.x
+
+    - name: Checkout openstack-operator repository
+      uses: actions/checkout@v2
+      with:
+        repository: openstack-k8s-operators/openstack-operator
+
+    - name: Edit custom-bundle.Dockerfile
+      run: |
+        sed -i "s/quay.io\/openstack-k8s-operators\/${{ inputs.operator_name }}-bundle:latest/${{ env.imageregistry }}\/${{ env.imagenamespace }}\/${{ inputs.operator_name }}-bundle:${{ github.sha }}/" ${{ github.workspace }}/custom-bundle.Dockerfile
+
+    - name: Install operator-sdk
+      uses: redhat-actions/openshift-tools-installer@v1
+      with:
+        source: github
+        operator-sdk: '1.23.0'
+
+    - name: Create bundle image
+      run: |
+        pushd ${{ github.workspace }}/.github/
+        chmod +x "create_bundle.sh"
+        "./create_bundle.sh"
+        popd
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        GIT_SHA: ${{ github.sha }}
+        BASE_IMAGE: openstack-operator
+
+    - name: Build openstack-operator-bundle using buildah
+      id: build-openstack-operator-bundle
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: openstack-operator-bundle
+        tags: ${{ github.sha }}
+        containerfiles: |
+          ./custom-bundle.Dockerfile
+
+    - name: Push openstack-operator To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-openstack-operator-bundle.outputs.image }}
+        tags: ${{ steps.build-openstack-operator-bundle.outputs.tags }}
+        registry:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.RDO_QUAY_USERNAME }}
+        password: ${{ secrets.RDO_QUAY_PASSWORD }}
+
+
+  build-openstack-operator-index:
+    needs: [build-openstack-operator-bundle]
+    name: Build openstack-operator-index Image
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout openstack-operator repository
+      uses: actions/checkout@v2
+      with:
+        repository: openstack-k8s-operators/openstack-operator
+
+    - name: Install opm
+      uses: redhat-actions/openshift-tools-installer@v1
+      with:
+        source: github
+        opm: 'latest'
+
+    - name: Create index image
+      run: |
+        pushd ${{ github.workspace }}/.github/
+        chmod +x "create_opm_index.sh"
+        "./create_opm_index.sh"
+        popd
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        GIT_SHA: ${{ github.sha }}
+        BUNDLE_IMAGE: openstack-operator-bundle
+        INDEX_IMAGE_TAG: ${{ github.sha }}
+        INDEX_IMAGE: openstack-operator-index
+
+    - name: Push openstack-operator-index To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: openstack-operator-index
+        tags: ${{ github.sha }}
+        registry:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.RDO_QUAY_USERNAME }}
+        password: ${{ secrets.RDO_QUAY_PASSWORD }}
+
+
+  SNO-e2e-install-operator:
+    needs: build-openstack-operator-index
+    name: sno-e2e-install-operator
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: tripleo-ci/openstack-k8s-operators-ci
+          ref: check_jobs
+
+      - name: Install OpenStack Client
+        run: |
+          sudo apt install python3-dev python3-pip
+          sudo pip3 install --upgrade pip
+          sudo pip3 install python-openstackclient
+          sudo pip3 install python-heatclient
+
+      - name: Create a Heat Stack with Pre-deployed OCP SNO Environment
+        shell: bash
+        env:
+          OS_USERNAME: ${{ secrets.OS_USERNAME }}
+          OS_PROJECT_NAME: ${{ secrets.OS_PROJECT_NAME }}
+          OS_PASSWORD: ${{ secrets.OS_PASSWORD }}
+          OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
+          OS_PROJECT_DOMAIN_ID: ${{ secrets.OS_PROJECT_DOMAIN_ID }}
+          OS_USER_DOMAIN_NAME: ${{ secrets.OS_USER_DOMAIN_NAME }}
+        run: |
+          openstack stack create -t ${{ github.workspace }}/.github/sno_heat_stack.yaml gha_sno_stack_${GITHUB_SHA:0:7} --wait
+          floating_ip=$(openstack stack output show gha_sno_stack_${GITHUB_SHA:0:7} heat_server_public_ip -c output_value -f value)
+          echo "$floating_ip api.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
+          echo "$floating_ip console-openshift-console.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
+          echo "$floating_ip integrated-oauth-server-openshift-authentication.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
+          echo "$floating_ip oauth-openshift.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
+          echo "$floating_ip prometheus-k8s-openshift-monitoring.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
+          echo "$floating_ip grafana-openshift-monitoring.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
+          echo "$floating_ip keystone-public-openstack.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
+
+      - name: Wait for 5 mins for OCP cluster to get stable
+        run: |
+          sleep 300
+
+      - name: Try to login as kubeadmin
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 10
+          max_attempts: 10
+          retry_wait_seconds: 30
+          shell: bash
+          retry_on: error
+          command: |
+            oc login -u kubeadmin -p ${{ secrets.SNO_KUBEADMIN_PASSWORD }} https://api.${{ secrets.SNO_DOMAIN_NAME }}:6443 --insecure-skip-tls-verify
+            bash ${{ github.workspace }}/.github/cluster_pre_steps.sh
+
+      - name: Install operators
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 10
+          max_attempts: 5
+          retry_wait_seconds: 20
+          retry_on: error
+          shell: bash
+          command: |
+            oc login -u kubeadmin -p ${{ secrets.SNO_KUBEADMIN_PASSWORD }} https://api.${{ secrets.SNO_DOMAIN_NAME }}:6443 --insecure-skip-tls-verify
+            bash ${{ github.workspace }}/.github/install_operator_with_hash.sh openstack-operator ${{ env.imageregistry }}\/${{ env.imagenamespace }} ${{ github.sha }}
+
+      - name: Post tests to confirm operators are working
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 10
+          max_attempts: 5
+          retry_wait_seconds: 20
+          shell: bash
+          retry_on: error
+          command: |
+            oc login -u kubeadmin -p ${{ secrets.SNO_KUBEADMIN_PASSWORD }} https://api.${{ secrets.SNO_DOMAIN_NAME }}:6443 --insecure-skip-tls-verify
+            bash ${{ github.workspace }}/.github/operators_post_tests.sh
+
+      - name: Delete OCP cluster
+        shell: bash
+        if: always()
+        env:
+          OS_USERNAME: ${{ secrets.OS_USERNAME }}
+          OS_PROJECT_NAME: ${{ secrets.OS_PROJECT_NAME }}
+          OS_PASSWORD: ${{ secrets.OS_PASSWORD }}
+          OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
+          OS_PROJECT_DOMAIN_ID: ${{ secrets.OS_PROJECT_DOMAIN_ID }}
+          OS_USER_DOMAIN_NAME: ${{ secrets.OS_USER_DOMAIN_NAME }}
+        run: |
+          openstack stack delete gha_sno_stack_${GITHUB_SHA:0:7}

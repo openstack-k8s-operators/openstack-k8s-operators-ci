@@ -333,8 +333,8 @@ jobs:
           OS_PROJECT_DOMAIN_ID: ${{ secrets.OS_PROJECT_DOMAIN_ID }}
           OS_USER_DOMAIN_NAME: ${{ secrets.OS_USER_DOMAIN_NAME }}
         run: |
-          openstack stack create -t ${{ github.workspace }}/.github/sno_heat_stack.yaml gha_sno_stack_${GITHUB_SHA:0:7} --wait
-          floating_ip=$(openstack stack output show gha_sno_stack_${GITHUB_SHA:0:7} heat_server_public_ip -c output_value -f value)
+          openstack stack create -t ${{ github.workspace }}/.github/sno_heat_stack.yaml gha_sno_stack_${{ github.event.repository.name }}_${{ github.event.pull_request.number }} --wait
+          floating_ip=$(openstack stack output show gha_sno_stack_${{ github.event.repository.name }}_${{ github.event.pull_request.number }} heat_server_public_ip -c output_value -f value)
           echo "$floating_ip api.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
           echo "$floating_ip console-openshift-console.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
           echo "$floating_ip integrated-oauth-server-openshift-authentication.apps.${{ secrets.SNO_DOMAIN_NAME }}" | sudo tee -a /etc/hosts > /dev/null
@@ -394,4 +394,4 @@ jobs:
           OS_PROJECT_DOMAIN_ID: ${{ secrets.OS_PROJECT_DOMAIN_ID }}
           OS_USER_DOMAIN_NAME: ${{ secrets.OS_USER_DOMAIN_NAME }}
         run: |
-          openstack stack delete gha_sno_stack_${GITHUB_SHA:0:7}
+          openstack stack delete gha_sno_stack_${{ github.event.repository.name }}_${{ github.event.pull_request.number }}

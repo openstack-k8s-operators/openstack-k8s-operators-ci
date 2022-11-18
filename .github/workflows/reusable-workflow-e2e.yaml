@@ -183,10 +183,10 @@ jobs:
       run: |
         pushd ${{ github.workspace }}
         version=`cat go.mod | grep -m 1 github.com/openstack-k8s-operators/keystone-operator/api | cut -d ' ' -f2`
-        go mod edit --replace github.com/openstack-k8s-operators/${{ inputs.operator_name }}/api@$version=github.com/${{github.event.pull_request.head.repo.full_name}}/api@${{ github.head_ref }}
+        go mod edit --replace github.com/openstack-k8s-operators/${{ inputs.operator_name }}/api@$version=github.com/${{github.event.pull_request.head.repo.full_name}}/api@${{github.event.pull_request.head.sha}}
         go mod tidy
         cd ./apis/
-        go mod edit --replace github.com/openstack-k8s-operators/${{ inputs.operator_name }}/api@$version=github.com/${{github.event.pull_request.head.repo.full_name}}/api@${{ github.head_ref }}
+        go mod edit --replace github.com/openstack-k8s-operators/${{ inputs.operator_name }}/api@$version=github.com/${{github.event.pull_request.head.repo.full_name}}/api@${{github.event.pull_request.head.sha}}
         go mod tidy
         git diff
         popd

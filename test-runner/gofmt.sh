@@ -1,6 +1,7 @@
 #!/bin/bash
 set -ex
 
+GOWORK=${GOWORK:-'off'}
 BASE_DIR="$(dirname $0)"
 cd "${BASE_DIR}/../.."
 
@@ -10,5 +11,5 @@ if [ -n "$1" ]; then
 fi
 
 pushd ${MODULE_DIR}
-go fmt ./...
+GOWORK=$GOWORK go fmt ./...
 popd

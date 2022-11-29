@@ -1,6 +1,7 @@
 #!/bin/bash
 set -ex
 
+GOWORK=${GOWORK:-'off'}
 BASE_DIR="$(dirname $0)"
 cd "${BASE_DIR}/../.."
 
@@ -21,5 +22,5 @@ fi
 
 pushd ${MODULE_DIR}
 
-GOGC=10 GOLANGCI_LINT_CACHE=/tmp/golangci-cache ${BASE_DIR}/../../bin/golangci-lint run --timeout=${TIMEOUT}m -v
+GOWORK=$GOWORK GOGC=10 GOLANGCI_LINT_CACHE=/tmp/golangci-cache ${BASE_DIR}/../../bin/golangci-lint run --timeout=${TIMEOUT}m -v
 popd

@@ -5,6 +5,7 @@ set -ex
 # "-set_exit_status" otherwise
 LINT_EXIT_STATUS="-set_exit_status"
 
+GOWORK=${GOWORK:-'off'}
 BASE_DIR="$(dirname $0)"
 cd "${BASE_DIR}/../.."
 
@@ -25,5 +26,5 @@ fi
 pushd ${MODULE_DIR}
 export GOFLAGS="-mod=mod"
 
-golint ${LINT_EXIT_STATUS} ./...
+GOWORK=$GOWORK golint ${LINT_EXIT_STATUS} ./...
 popd

@@ -313,8 +313,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: tripleo-ci/openstack-k8s-operators-ci
-          ref: check_jobs
+          repository: openstack-k8s-operators/openstack-k8s-operators-ci
 
       - name: Install OpenStack Client
         run: |

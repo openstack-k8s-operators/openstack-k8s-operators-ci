@@ -313,8 +313,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          repository: tripleo-ci/openstack-k8s-operators-ci
-          ref: run_kuttl_tests
+          repository: openstack-k8s-operators/openstack-k8s-operators-ci
 
       - name: Install OpenStack Client
         run: |
@@ -363,13 +362,13 @@ jobs:
         uses: nick-fields/retry@v2
         with:
           timeout_minutes: 10
-          max_attempts: 5
+          max_attempts: 3
           retry_wait_seconds: 20
           retry_on: error
           shell: bash
           command: |
             oc login -u kubeadmin -p ${{ secrets.SNO_KUBEADMIN_PASSWORD }} https://api.${{ secrets.SNO_DOMAIN_NAME }}:6443 --insecure-skip-tls-verify
-            bash ${{ github.workspace }}/.github/run_kuttl_tests.sh ${{ inputs.operator_name }} ${{ env.imageregistry }}\/${{ env.imagenamespace }} ${{ github.sha }}
+            bash ${{ github.workspace }}/.github/run_kuttl_tests.sh ${{ inputs.operator_name }} ${{ env.imageregistry }}\/${{ env.imagenamespace }} ${{ github.sha }} ${{github.event.pull_request.head.repo.full_name}} ${{github.event.pull_request.head.ref}}
 
       - name: Install operators
         uses: nick-fields/retry@v2

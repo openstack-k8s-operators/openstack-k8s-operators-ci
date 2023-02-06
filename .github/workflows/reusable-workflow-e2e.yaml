@@ -40,7 +40,7 @@ jobs:
       - name: Check secrets are set
         id: have-secrets
         if: "${{ env.imagenamespace != '' }}"
-        run: echo "::set-output name=ok::true"
+        run: echo "ok=true" >> $GITHUB_OUTPUT
     outputs:
       have-secrets: ${{ steps.have-secrets.outputs.ok }}
 
@@ -51,7 +51,7 @@ jobs:
     if: needs.check-secrets.outputs.have-secrets == 'true'
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         ref: ${{  github.event.pull_request.head.sha}}
 
@@ -80,12 +80,12 @@ jobs:
 
     steps:
     - name: Install Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: 1.18.x
 
     - name: Checkout ${{ inputs.operator_name }} repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -132,7 +132,7 @@ jobs:
 
     steps:
     - name: Checkout ${{ inputs.operator_name }} repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -170,12 +170,12 @@ jobs:
     needs: [build-operator-bundle]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         repository: openstack-k8s-operators/openstack-operator
 
     - name: Setup Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: 1.19
 
@@ -216,12 +216,12 @@ jobs:
 
     steps:
     - name: Install Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: 1.19.x
 
     - name: Checkout openstack-operator repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: openstack-k8s-operators/openstack-operator
 
@@ -272,7 +272,7 @@ jobs:
 
     steps:
     - name: Checkout openstack-operator repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: openstack-k8s-operators/openstack-operator
 

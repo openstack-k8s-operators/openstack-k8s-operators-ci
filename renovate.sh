@@ -11,6 +11,7 @@ do
  --log-file-level=debug \
  --allowed-post-upgrade-commands="^make manifests generate,^make gowork,^go mod tidy" \
  openstack-k8s-operators/openstack-operator \
+ openstack-k8s-operators/lib-common \
  openstack-k8s-operators/nova-operator \
  openstack-k8s-operators/keystone-operator \
  openstack-k8s-operators/mariadb-operator \

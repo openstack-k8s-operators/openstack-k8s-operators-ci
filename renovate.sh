@@ -18,7 +18,9 @@ do
  openstack-k8s-operators/cinder-operator \
  openstack-k8s-operators/glance-operator \
  openstack-k8s-operators/placement-operator \
- openstack-k8s-operators/manila-operator
+ openstack-k8s-operators/manila-operator \
+ openstack-k8s-operators/dataplane-operator \
+ openstack-k8s-operators/openstack-ansibleee-operator
  echo "sleeping 60 minutes..."
  sleep 3600
 done

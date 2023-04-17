@@ -23,7 +23,10 @@ do
  openstack-k8s-operators/horizon-operator \
  openstack-k8s-operators/ironic-operator \
  openstack-k8s-operators/dataplane-operator \
- openstack-k8s-operators/openstack-ansibleee-operator
+ openstack-k8s-operators/openstack-ansibleee-operator \
+ openstack-k8s-operators/horizon-operator \
+ openstack-k8s-operators/heat-operator
+
  echo "sleeping 60 minutes..."
  sleep 3600
 done

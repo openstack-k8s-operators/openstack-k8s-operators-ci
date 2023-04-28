@@ -25,6 +25,7 @@ do
  openstack-k8s-operators/dataplane-operator \
  openstack-k8s-operators/openstack-ansibleee-operator \
  openstack-k8s-operators/horizon-operator \
+ openstack-k8s-operators/octavia-operator \
  openstack-k8s-operators/heat-operator
 
  echo "sleeping 60 minutes..."

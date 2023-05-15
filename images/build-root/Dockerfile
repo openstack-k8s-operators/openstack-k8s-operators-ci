@@ -4,7 +4,7 @@ RUN yum install -y gcc git jq make python39 python39-pip && \
 yum clean all && rm -rf /var/cache/dnf/*
 RUN alternatives --set python3 /usr/bin/python3.9
 RUN pip3 install python-openstackclient yq
-RUN curl -s -L "https://raw.githubusercontent.com/openstack-k8s-operators/install_yamls/master/devsetup/vars/default.yaml" -o default.yaml
+RUN curl -s -L "https://raw.githubusercontent.com/openstack-k8s-operators/install_yamls/main/devsetup/vars/default.yaml" -o default.yaml
 RUN SDK_VERSION=$(cat ./default.yaml | yq -r ".sdk_version") \
       && curl -s -L "https://github.com/operator-framework/operator-sdk/releases/download/${SDK_VERSION}/operator-sdk_linux_amd64" -o operator-sdk
 RUN chmod +x ./operator-sdk

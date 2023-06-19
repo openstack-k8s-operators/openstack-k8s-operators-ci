@@ -12,6 +12,7 @@ do
  --allowed-post-upgrade-commands="^make manifests generate,^make gowork,^go mod tidy,^make tidy" \
  openstack-k8s-operators/openstack-operator \
  openstack-k8s-operators/lib-common \
+ openstack-k8s-operators/infra-operator \
  openstack-k8s-operators/nova-operator \
  openstack-k8s-operators/keystone-operator \
  openstack-k8s-operators/mariadb-operator \

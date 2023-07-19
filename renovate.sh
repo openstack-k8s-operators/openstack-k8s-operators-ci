@@ -4,7 +4,7 @@ set -v
 while true
 do
  echo "Running Renovate..."
- podman run --rm \
+ podman run --rm --pull=always \
  renovate/renovate \
  --token="${RENOVATE_TOKEN}" \
  --git-author="OpenStack K8s CI <openstack-k8s@redhat.com>" \

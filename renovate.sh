@@ -29,7 +29,8 @@ do
  openstack-k8s-operators/neutron-operator \
  openstack-k8s-operators/ovn-operator \
  openstack-k8s-operators/heat-operator \
- openstack-k8s-operators/telemetry-operator
+ openstack-k8s-operators/telemetry-operator \
+ openstack-k8s-operators/swift-operator
 
  echo "sleeping 60 minutes..."
  sleep 3600

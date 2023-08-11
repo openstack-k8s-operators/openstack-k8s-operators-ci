@@ -3,6 +3,9 @@
 set -v
 while true
 do
+ echo "Pruning old images"
+ podman image prune --force
+
  echo "Running Renovate..."
  podman run --rm --pull=always \
  renovate/renovate \

@@ -5,7 +5,7 @@ RUN git clone https://github.com/openstack-k8s-operators/repo-setup && \
     pushd repo-setup && \
     python3 setup.py install && \
     popd && \
-    /usr/local/bin/repo-setup current-podified-dev
+    /usr/local/bin/repo-setup current-podified -b antelope
 
 RUN dnf update -y && \
     dnf install -y python3-tempestconf openstack-tempest openstack-tempest-all && \

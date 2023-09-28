@@ -1,11 +1,11 @@
 FROM centos/centos:stream9
 USER root
 RUN dnf install -y gcc git jq make python3 python3-pip python-setuptools python-requests
-RUN git clone https://git.openstack.org/openstack/tripleo-repos && \
-    pushd tripleo-repos && \
+RUN git clone https://github.com/openstack-k8s-operators/repo-setup && \
+    pushd repo-setup && \
     python3 setup.py install && \
     popd && \
-    /usr/local/bin/tripleo-repos current-tripleo-dev
+    /usr/local/bin/repo-setup current-podified -b antelope
 
 RUN dnf update -y && \
     dnf install -y python3-tempestconf openstack-tempest openstack-tempest-all && \

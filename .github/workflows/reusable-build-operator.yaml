@@ -1,0 +1,272 @@
+# We tag each operator with 3 tags:
+# 1) Git commit sha: This is useful to lookup the bundle images with SHA's
+#    based on the gomod entries
+# 2) the branch name, or 'latest' tag
+# 3) the digest: this is useful because we reference images by SHA256 digests
+#    in the bundles now for offline/air gapped installation support
+
+name: Operator image builder
+
+on:
+  workflow_call:
+    inputs:
+      operator_name:
+        required: true
+        type: string
+      go_version:
+        required: true
+        type: string
+      operator_sdk_version:
+        required: true
+        type: string
+      bundle_dockerfile: # openstack-operator uses a custom ./custom-bundle.Dockerfile.pinned
+        required: false
+        type: string
+        default: ./bundle.Dockerfile
+      catalog_extra_bundles_script: # openstack-operator creates a list of pinned bundle images for the catalog/index
+        required: false
+        type: string
+        default: ""
+    secrets:
+      IMAGENAMESPACE:
+        required: true
+      QUAY_USERNAME:
+        required: true
+      QUAY_PASSWORD:
+        required: true
+      REDHATIO_USERNAME:
+        required: true
+      REDHATIO_PASSWORD:
+        required: true
+
+env:
+  imageregistry: 'quay.io'
+  imagenamespace: ${{ secrets.IMAGENAMESPACE || secrets.QUAY_USERNAME }}
+  latesttag: latest
+
+jobs:
+
+  build-operator:
+    name: Build ${{ inputs.operator_name }}-operator image using buildah
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Get branch name
+      id: branch-name
+      uses: tj-actions/branch-names@v7
+
+    - name: Set latest tag for non main branch
+      if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
+      run: |
+        echo "latesttag=${{ steps.branch-name.outputs.current_branch }}-latest" >> $GITHUB_ENV
+
+    - name: Buildah Action
+      id: build-operator
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ inputs.operator_name }}-operator
+        tags: ${{ env.latesttag }} ${{ github.sha }}
+        containerfiles: |
+          ./Dockerfile
+
+    - name: Push ${{ inputs.operator_name }}-operator To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-operator.outputs.image }}
+        tags: ${{ steps.build-operator.outputs.tags }}
+        registry: ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+        digestfile: digest.txt
+
+    - name: Set OPERATOR_IMAGE_DIGEST for Operator and tag
+      shell: bash
+      run: |
+        DIGEST=$(cat digest.txt | sed -e 's|sha256:||')
+        echo "OPERATOR_IMAGE_DIGEST=$DIGEST" >> $GITHUB_ENV
+        podman tag "localhost/${IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${IMAGE}:${DIGEST}"
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        IMAGE: ${{ inputs.operator_name }}-operator
+        GITHUB_SHA: ${{ github.sha }}
+
+    - name: Push tag with digest ${{ env.OPERATOR_IMAGE_DIGEST }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-operator.outputs.image }}
+        tags: ${{ env.OPERATOR_IMAGE_DIGEST }}
+        registry: ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+  build-operator-bundle:
+    needs: build-operator
+    name: ${{ inputs.operator_name }}-operator-bundle
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ inputs.go_version }}
+
+    - name: Checkout ${{ inputs.operator_name }}-operator repository
+      uses: actions/checkout@v4
+
+    - name: Install operator-sdk
+      uses: redhat-actions/openshift-tools-installer@v1
+      with:
+        source: github
+        operator-sdk: ${{ inputs.operator_sdk_version }}
+
+    - name: Log in to Quay Registry
+      uses: redhat-actions/podman-login@v1
+      with:
+        registry: ${{ env.imageregistry }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+    - name: Log in to Red Hat Registry
+      uses: redhat-actions/podman-login@v1
+      with:
+        registry: registry.redhat.io
+        username: ${{ secrets.REDHATIO_USERNAME }}
+        password: ${{ secrets.REDHATIO_PASSWORD }}
+
+    - name: Create bundle image
+      shell: bash
+      run: |
+        USE_IMAGE_DIGESTS=true IMG=${REGISTRY}/${BASE_IMAGE}:${GITHUB_SHA} make bundle
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        GITHUB_SHA: ${{ github.sha }}
+        BASE_IMAGE: ${{ inputs.operator_name }}-operator
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Get branch name
+      id: branch-name
+      uses: tj-actions/branch-names@v7
+
+    - name: Set latest tag for non main branch
+      if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
+      run: |
+        echo "latesttag=${{ steps.branch-name.outputs.current_branch }}-latest" >> $GITHUB_ENV
+
+    - name: Build operator-bundle using buildah
+      id: build-operator-bundle
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ inputs.operator_name }}-operator-bundle
+        tags: ${{ env.latesttag }} ${{ github.sha }}
+        containerfiles: ${{ inputs.bundle_dockerfile }}
+
+    - name: Push ${{ inputs.operator_name }}-operator To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-operator-bundle.outputs.image }}
+        tags: ${{ steps.build-operator-bundle.outputs.tags }}
+        registry:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+        digestfile: digest.txt
+
+    - name: Set OPERATOR_BUNDLE_IMAGE_DIGEST for Operator and tag
+      shell: bash
+      run: |
+        DIGEST=$(cat digest.txt | sed -e 's|sha256:||')
+        echo "OPERATOR_BUNDLE_IMAGE_DIGEST=$DIGEST" >> $GITHUB_ENV
+        podman tag "localhost/${IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${IMAGE}:${DIGEST}"
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        IMAGE: ${{ inputs.operator_name }}-operator-bundle
+        GITHUB_SHA: ${{ github.sha }}
+
+    - name: Push tag with digest ${{ env.OPERATOR_BUNDLE_IMAGE_DIGEST }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ steps.build-operator-bundle.outputs.image }}
+        tags: ${{ env.OPERATOR_BUNDLE_IMAGE_DIGEST }}
+        registry: ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+  build-operator-index:
+    needs: build-operator-bundle
+    name: operator-index
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout ${{ inputs.operator_name }}-operator repository
+      uses: actions/checkout@v4
+
+    - name: Get branch name
+      id: branch-name
+      uses: tj-actions/branch-names@v7
+
+    - name: Set latest tag for non main branch
+      if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
+      run: |
+        echo "latesttag=${{ steps.branch-name.outputs.current_branch }}-latest" >> $GITHUB_ENV
+
+    - name: Install opm
+      uses: redhat-actions/openshift-tools-installer@v1
+      with:
+        source: github
+        opm: 'latest'
+
+    - name: Log in to Red Hat Registry
+      uses: redhat-actions/podman-login@v1
+      with:
+        registry: ${{ env.imageregistry }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+    - name: Create index image
+      shell: bash
+      run: |
+        CATALOG_EXTRA_BUNDLES=""
+        if [ -n "$CATALOG_EXTRA_BUNDLES_SCRIPT"]; then
+          #NOTE: script is responsible for prefixing a comma
+          CATALOG_EXTRA_BUNDLES=$(/bin/bash $CATALOG_EXTRA_BUNDLES_SCRIPT)
+        fi
+        opm index add --bundles "${REGISTRY}/${BUNDLE_IMAGE}:${GITHUB_SHA}${CATALOG_EXTRA_BUNDLES}" --tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" -u podman --pull-tool podman
+        podman tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${INDEX_IMAGE}:${INDEX_IMAGE_TAG}"
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        GITHUB_SHA: ${{ github.sha }}
+        BUNDLE_IMAGE: ${{ inputs.operator_name }}-operator-bundle
+        INDEX_IMAGE_TAG: ${{ env.latesttag }}
+        INDEX_IMAGE: ${{ inputs.operator_name }}-operator-index
+        CATALOG_EXTRA_BUNDLES_SCRIPT: ${{ inputs.catalog_extra_bundles_script }}
+
+    - name: Push ${{ inputs.operator_name }}-operator-index To ${{ env.imageregistry }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ inputs.operator_name }}-operator-index
+        tags: ${{ env.latesttag }} ${{ github.sha }}
+        registry:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+        digestfile: digest.txt
+
+    - name: Set OPERATOR_INDEX_IMAGE_DIGEST for Operator and tag
+      shell: bash
+      run: |
+        DIGEST=$(cat digest.txt | sed -e 's|sha256:||')
+        echo "OPERATOR_INDEX_IMAGE_DIGEST=$DIGEST" >> $GITHUB_ENV
+        podman tag "${REGISTRY}/${IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${IMAGE}:${DIGEST}"
+      env:
+        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        IMAGE: ${{ inputs.operator_name }}-operator-index
+        GITHUB_SHA: ${{ github.sha }}
+
+    - name: Push tag with digest ${{ env.OPERATOR_INDEX_IMAGE_DIGEST }}
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: ${{ inputs.operator_name }}-operator-index
+        tags: ${{ env.OPERATOR_INDEX_IMAGE_DIGEST }}
+        registry: ${{ env.imageregistry }}/${{ env.imagenamespace }}
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}

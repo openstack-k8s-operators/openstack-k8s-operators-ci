@@ -19,6 +19,14 @@ on:
       operator_sdk_version:
         required: true
         type: string
+      bundle_dockerfile: # openstack-operator uses a custom ./custom-bundle.Dockerfile.pinned
+        required: false
+        type: string
+        default: ./bundle.Dockerfile
+      catalog_extra_bundles_script: # openstack-operator creates a list of pinned bundle images for the catalog/index
+        required: false
+        type: string
+        default: ""
     secrets:
       IMAGENAMESPACE:
         required: true
@@ -152,8 +160,7 @@ jobs:
       with:
         image: ${{ inputs.operator_name }}-operator-bundle
         tags: ${{ env.latesttag }} ${{ github.sha }}
-        containerfiles: |
-          ./bundle.Dockerfile
+        containerfiles: ${{ inputs.bundle_dockerfile }}
 
     - name: Push ${{ inputs.operator_name }}-operator To ${{ env.imageregistry }}
       uses: redhat-actions/push-to-registry@v2
@@ -219,7 +226,12 @@ jobs:
     - name: Create index image
       shell: bash
       run: |
-        opm index add --bundles "${REGISTRY}/${BUNDLE_IMAGE}:${GITHUB_SHA}" --tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" -u podman --pull-tool podman
+        CATALOG_EXTRA_BUNDLES=""
+        if [ -n "$CATALOG_EXTRA_BUNDLES_SCRIPT"]; then
+          #NOTE: script is responsible for prefixing a comma
+          CATALOG_EXTRA_BUNDLES=$(/bin/bash $CATALOG_EXTRA_BUNDLES_SCRIPT)
+        fi
+        opm index add --bundles "${REGISTRY}/${BUNDLE_IMAGE}:${GITHUB_SHA}${CATALOG_EXTRA_BUNDLES}" --tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" -u podman --pull-tool podman
         podman tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${INDEX_IMAGE}:${INDEX_IMAGE_TAG}"
       env:
         REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
@@ -227,6 +239,7 @@ jobs:
         BUNDLE_IMAGE: ${{ inputs.operator_name }}-operator-bundle
         INDEX_IMAGE_TAG: ${{ env.latesttag }}
         INDEX_IMAGE: ${{ inputs.operator_name }}-operator-index
+        CATALOG_EXTRA_BUNDLES_SCRIPT: ${{ inputs.catalog_extra_bundles_script }}
 
     - name: Push ${{ inputs.operator_name }}-operator-index To ${{ env.imageregistry }}
       uses: redhat-actions/push-to-registry@v2

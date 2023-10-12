@@ -226,13 +226,15 @@ jobs:
     - name: Create index image
       shell: bash
       run: |
+        pushd "${GITHUB_WORKSPACE}"
         CATALOG_EXTRA_BUNDLES=""
-        if [ -n "$CATALOG_EXTRA_BUNDLES_SCRIPT"]; then
+        if [ -n "$CATALOG_EXTRA_BUNDLES_SCRIPT" ]; then
           #NOTE: script is responsible for prefixing a comma
           CATALOG_EXTRA_BUNDLES=$(/bin/bash $CATALOG_EXTRA_BUNDLES_SCRIPT)
         fi
         opm index add --bundles "${REGISTRY}/${BUNDLE_IMAGE}:${GITHUB_SHA}${CATALOG_EXTRA_BUNDLES}" --tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" -u podman --pull-tool podman
         podman tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${INDEX_IMAGE}:${INDEX_IMAGE_TAG}"
+        popd
       env:
         REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
         GITHUB_SHA: ${{ github.sha }}

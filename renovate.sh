@@ -40,6 +40,7 @@ do
  openstack-k8s-operators/heat-operator \
  openstack-k8s-operators/telemetry-operator \
  openstack-k8s-operators/designate-operator \
+ openstack-k8s-operators/barbican-operator \
  openstack-k8s-operators/swift-operator
 
  echo "sleeping 60 minutes..."

@@ -198,6 +198,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Install Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ inputs.go_version }}
+
     - name: Checkout ${{ inputs.operator_name }}-operator repository
       uses: actions/checkout@v4
 

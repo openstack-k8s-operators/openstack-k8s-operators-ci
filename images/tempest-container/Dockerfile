@@ -12,10 +12,6 @@ RUN dnf update -y && \
     dnf clean all && \
     rm -rf /var/cache/dnf/*
 
-RUN git clone https://git.openstack.org/openstack/openstack-tempest-skiplist && \
-    pushd openstack-tempest-skiplist && \
-    python3 -m pip install . && \
-    popd
 RUN curl -s -L "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64" -o yq
 RUN chmod +x ./yq
 RUN mv ./yq /usr/local/bin

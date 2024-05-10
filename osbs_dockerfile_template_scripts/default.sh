@@ -21,7 +21,7 @@ function replace_ARG_values() {
     do
         # Replace all Dockerfile ${ARGNAME} with the value from $ENVFILE
         # Use non priting character $'\001' to ensure it's not in the value
-        # sed is preffered over envsubst 
+        # sed is preffered over envsubst
         sed -ir s$'\001'\${"$value"}$'\001'"${!value}"$'\001' "$input_dockerfile"
 
         # Ensure none of the specified arguments is set

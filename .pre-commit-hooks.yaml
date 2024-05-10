@@ -1,0 +1,6 @@
+    - id: kuttl-single-test-assert
+      name: kuttl-single-test-assert
+      language: script
+      pass_filenames: false
+      entry: pre-commit-hooks/kuttl-single-test-assert.sh
+

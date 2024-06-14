@@ -1,3 +1,4 @@
+#!/bin/bash
 # Based on the stage_downstream_rebase.sh from dprince
 #   https://github.com/openstack-k8s-operators/osp-director-operator/pull/397
 #
@@ -35,7 +36,7 @@ function download_operator_sdk() {
     OPERATOR_SDK="${SDK_TMP_DIR}/operator-sdk"
 }
 
-# Do check if the branch is specified in upstream_to_downstream variable 
+# Do check if the branch is specified in upstream_to_downstream variable
 function check_if_branch_exists() {
     if [ -z ${upstream_to_downstream[${1}]} ]; then
         echo "Upstream branch ${1} is not supported by this script !"
@@ -240,7 +241,7 @@ if [ -z "$operator_branch" ]; then
         fi
     popd
     if [ -z "$operator_branch" ]; then
-        echo "ERROR: No upstream branch found!" 
+        echo "ERROR: No upstream branch found!"
         exit -1
     fi
 fi

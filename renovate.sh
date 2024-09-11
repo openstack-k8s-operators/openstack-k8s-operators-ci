@@ -29,7 +29,6 @@ do
  openstack-k8s-operators/placement-operator \
  openstack-k8s-operators/manila-operator \
  openstack-k8s-operators/ironic-operator \
- openstack-k8s-operators/openstack-ansibleee-operator \
  openstack-k8s-operators/openstack-baremetal-operator \
  openstack-k8s-operators/horizon-operator \
  openstack-k8s-operators/octavia-operator \

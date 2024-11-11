@@ -17,7 +17,7 @@ do
  --token="${RENOVATE_TOKEN}" \
  --git-author="OpenStack K8s CI <openstack-k8s@redhat.com>" \
  --update-not-scheduled=false \
- --allowed-post-upgrade-commands="^make manifests generate,^make gowork,^go mod tidy,^make tidy" \
+ --allowed-post-upgrade-commands="^make manifests generate,^make gowork,^go mod tidy,^make tidy,^make force-bump" \
  openstack-k8s-operators/openstack-operator \
  openstack-k8s-operators/lib-common \
  openstack-k8s-operators/infra-operator \

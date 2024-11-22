@@ -70,6 +70,8 @@ jobs:
         tags: ${{ env.latesttag }} ${{ github.sha }}
         containerfiles: |
           ./Dockerfile
+        envs:
+        - ENABLE_WEBHOOKS=false
 
     - name: Push ${{ inputs.operator_name }}-operator To ${{ env.imageregistry }}
       uses: redhat-actions/push-to-registry@v2

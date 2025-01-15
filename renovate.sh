@@ -6,14 +6,27 @@ do
  echo "Pruning old images"
  podman image prune --force
 
- # NOTE(gibi): The --update-not-scheduled casues that renovate
+ # NOTE: (dprince) openstack-operator requires skopeo (and wget for now)
+ mkdir -p custom_renovate
+ pushd custom_renovate
+cat << EOF_CAT > Dockerfile
+FROM renovate:latest
+USER root
+RUN apt-get update
+RUN apt-get install -y skopeo wget file
+USER ubuntu
+EOF_CAT
+ popd
+ podman build --pull=always custom_renovate -t renovate:local
+
+ # NOTE(gibi): The --update-not-scheduled causes that renovate
  # will only auto rebase its PRs during our pre-defined schedule
  # so it won't do rebase at every renovater run if the base
  # branch changes
 
  echo "Running Renovate..."
- podman run --rm --pull=always \
- renovate/renovate \
+ podman run --rm \
+ localhost/renovate:local \
  --token="${RENOVATE_TOKEN}" \
  --git-author="OpenStack K8s CI <openstack-k8s@redhat.com>" \
  --update-not-scheduled=false \

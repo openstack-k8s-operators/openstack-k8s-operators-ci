@@ -46,9 +46,23 @@ env:
 
 jobs:
 
+  check-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets are set
+        id: check
+        if: "${{ env.imagenamespace == '' }}"
+        run: |
+          echo "::error title=Missing required secrets::See https://github.com/openstack-k8s-operators/dev-docs/blob/main/image_build.md#creating-images-using-github-actions"
+          echo "missing=true">>$GITHUB_OUTPUT
+    outputs:
+      missing-secrets: ${{ steps.check.outputs.missing }}
+
   build-operator:
+    needs: check-secrets
     name: Build ${{ inputs.operator_name }}-operator image using buildah
     runs-on: ubuntu-latest
+    if: needs.check-secrets.outputs.missing-secrets != 'true'
 
     steps:
     - uses: actions/checkout@v4

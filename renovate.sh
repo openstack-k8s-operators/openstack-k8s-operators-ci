@@ -52,7 +52,8 @@ EOF_CAT
  openstack-k8s-operators/designate-operator \
  openstack-k8s-operators/barbican-operator \
  openstack-k8s-operators/swift-operator \
- openstack-k8s-operators/test-operator
+ openstack-k8s-operators/test-operator \
+ openstack-k8s-operators/watcher-operator
 
  echo "sleeping 60 minutes..."
  sleep 3600

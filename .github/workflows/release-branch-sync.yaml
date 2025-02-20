@@ -1,0 +1,30 @@
+name: Force Push Branch
+
+on:
+  push:
+    branches:
+      - '*'
+env:
+  # TODO set this the default here to FR2 branches when they get created
+  source_branch: ${{ secrets.RELEASE_BRANCH_SOURCE || 'main' }}
+  target_branch: ${{ secrets.RELEASE_BRANCH_TARGET || 'olive' }}
+
+jobs:
+  force-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Git config
+        run: |
+          git config user.name "openstack-k8s-operators-ci"
+          git config user.email "openstack-k8s-operators-ci@github.com"
+
+      - name: Force Push Branch
+        run: |
+          git fetch origin ${{ env.source_branch }}
+          git checkout ${{ env.source_branch }}
+          git push --force origin ${{ env.source_branch }}:${{ env.target_branch }}

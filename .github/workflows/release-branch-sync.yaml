@@ -1,0 +1,34 @@
+name: Force Push Branch
+
+on:
+  workflow_call:
+    inputs:
+      source_branch:
+        type: string
+        required: false
+        default: main
+      target_branch:
+        type: string
+        required: false
+        default: olive
+
+jobs:
+  force-push:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'openstack-k8s-operators'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Git config
+        run: |
+          git config user.name "openstack-k8s-operators-ci"
+          git config user.email "openstack-k8s-operators-ci@github.com"
+
+      - name: Force Push Branch
+        run: |
+          git fetch origin ${{ inputs.source_branch }}
+          git checkout ${{ inputs.source_branch }}
+          git push --force origin ${{ inputs.source_branch }}:${{ inputs.target_branch }}

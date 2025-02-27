@@ -25,7 +25,7 @@ EOF_CAT
  # branch changes
 
  echo "Running Renovate..."
- podman run --rm \
+ podman run -e BINDATA_GIT_ADD=true --rm \
  localhost/renovate:local \
  --token="${RENOVATE_TOKEN}" \
  --git-author="OpenStack K8s CI <openstack-k8s@redhat.com>" \

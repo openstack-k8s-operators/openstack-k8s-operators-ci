@@ -1,6 +1,12 @@
 # This is what we use to run a self-hosted Renovate to create github PR's.
 # Running self-hosted is required to be able to execute the postUpgradeCommands
 set -v
+
+log_dir="./logs"
+mkdir -p $log_dir
+
+find "$log_dir" -type f -name "*.log" -mtime +5 -exec rm -f {} \;
+
 while true
 do
  echo "Pruning old images"
@@ -24,8 +30,10 @@ EOF_CAT
  # so it won't do rebase at every renovater run if the base
  # branch changes
 
+ log_file="$log_dir/renovate_$(date +'%Y%m%d_%H%M%S').log"
+
  echo "Running Renovate..."
- podman run -e BINDATA_GIT_ADD=true --rm \
+ podman run -e BINDATA_GIT_ADD=true -e LOG_LEVEL=debug --rm \
  localhost/renovate:local \
  --token="${RENOVATE_TOKEN}" \
  --git-author="OpenStack K8s CI <openstack-k8s@redhat.com>" \
@@ -53,7 +61,7 @@ EOF_CAT
  openstack-k8s-operators/barbican-operator \
  openstack-k8s-operators/swift-operator \
  openstack-k8s-operators/test-operator \
- openstack-k8s-operators/watcher-operator
+ openstack-k8s-operators/watcher-operator 2>&1 | tee $log_file
 
  echo "sleeping 60 minutes..."
  sleep 3600

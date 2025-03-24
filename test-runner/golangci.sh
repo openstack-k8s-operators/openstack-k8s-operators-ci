@@ -8,7 +8,7 @@ cd "${BASE_DIR}/../.."
 export GOFLAGS="-mod=mod"
 
 # Install golangci
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | bash -x -s --
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | bash -x -s -- $GOLANGCI_TAG
 
 MODULE_DIR="."
 if [ -n "$1" ]; then

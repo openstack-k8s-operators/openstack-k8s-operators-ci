@@ -5,7 +5,7 @@ set -v
 log_dir="./logs"
 mkdir -p $log_dir
 
-find "$log_dir" -type f -name "*.log" -mtime -5 -exec rm -f {} \;
+find "$log_dir" -type f -name "*.log" -mtime +5 -exec rm -f {} \;
 
 while true
 do

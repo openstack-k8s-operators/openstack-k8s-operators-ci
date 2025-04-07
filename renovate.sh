@@ -2,13 +2,12 @@
 # Running self-hosted is required to be able to execute the postUpgradeCommands
 set -v
 
-log_dir="./logs"
-mkdir -p $log_dir
-
-find "$log_dir" -type f -name "*.log" -mtime -5 -exec rm -f {} \;
-
 while true
 do
+ log_dir="./logs"
+ mkdir -p $log_dir
+ find "$log_dir" -type f -name "*.log" -mtime +5 -exec rm -f {} \;
+
  echo "Pruning old images"
  podman image prune --force
 

@@ -1,0 +1,20 @@
+name: Force bump branches
+
+on:
+  workflow_call:
+    inputs:
+      operator_name:
+        required: true
+        type: string
+
+jobs:
+
+  trigger-jobs:
+    uses: openstack-k8s-operators/openstack-k8s-operators-ci/.github/workflows/force-bump-pull-request.yaml@main
+    strategy:
+      matrix:
+        # maintain this list here so we can manage it in one location for all repos
+        branch: ["main", "18.0-fr2"]
+    with:
+      operator_name: ${{ inputs.operator_name }}
+      branch_name: ${{ matrix.branch }}

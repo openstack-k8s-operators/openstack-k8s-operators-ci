@@ -1,0 +1,58 @@
+name: Generate a PR to bump openstack-k8s-operators dependencies
+
+on:
+  workflow_call:
+    inputs:
+      operator_name:
+        required: true
+        type: string
+      branch_name:
+        default: 'main'
+        type: string
+
+jobs:
+
+  force-bump-pr:
+    name: Generate a pull request update to the latest openstack-k8s-operators dependencies for the selected operator
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.branch_name }}
+
+    - name: Git config
+      run: |
+        git config user.name "openstack-k8s-operators-ci"
+        git config user.email "openstack-k8s-operators-ci@github.com"
+
+    - name: run make force-bump, tidy, manifests, generate
+      shell: bash
+      run: |
+        make force-bump
+        make tidy
+        make manifests generate
+
+    - name: run make bindata
+      if: inputs.operator_name == 'openstack'
+      shell: bash
+      run: |
+        BRANCH='${{ inputs.branch_name }}' make bindata
+
+    - name: Detect if there are local git changes and set a variable
+      id: git_diff
+      run: |
+        if git diff --quiet; then
+            echo "changes=false" >> $GITHUB_OUTPUT
+        else
+            echo "changes=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Pull Request
+      if: steps.git_diff.outputs.changes == 'true'
+      uses: peter-evans/create-pull-request@v7
+      with:
+        title: "openstack-k8s-operators dependency bump branch: ${{ inputs.branch_name }}"
+        branch: "openstack-dependency-bump/${{ inputs.branch_name }}"
+        commit-message: "Update openstack-k8s-operators (${{ inputs.branch_name }})"

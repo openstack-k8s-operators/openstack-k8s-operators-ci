@@ -6,6 +6,9 @@ on:
       operator_name:
         required: true
         type: string
+    secrets:
+      FORCE_BUMP_PULL_REQUEST_PAT:
+        required: false
 
 jobs:
 
@@ -18,3 +21,5 @@ jobs:
     with:
       operator_name: ${{ inputs.operator_name }}
       branch_name: ${{ matrix.branch }}
+    secrets:
+      FORCE_BUMP_PULL_REQUEST_PAT: ${{ secrets.FORCE_BUMP_PULL_REQUEST_PAT }}

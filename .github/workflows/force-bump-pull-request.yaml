@@ -9,6 +9,9 @@ on:
       branch_name:
         default: 'main'
         type: string
+    secrets:
+      FORCE_BUMP_PULL_REQUEST_PAT:
+        required: false
 
 jobs:
 
@@ -49,10 +52,20 @@ jobs:
             echo "changes=true" >> $GITHUB_OUTPUT
         fi
 
+    - name: Set token
+      id: token
+      run: |
+        if [ -z "${{ secrets.FORCE_BUMP_PULL_REQUEST_PAT }}" ]; then
+          echo "token=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "token=${{ secrets.FORCE_BUMP_PULL_REQUEST_PAT }}" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Create Pull Request
       if: steps.git_diff.outputs.changes == 'true'
       uses: peter-evans/create-pull-request@v7
       with:
+        token: ${{ steps.token.outputs.token }}
         title: "openstack-k8s-operators dependency bump branch: ${{ inputs.branch_name }}"
         branch: "openstack-dependency-bump/${{ inputs.branch_name }}"
         commit-message: "Update openstack-k8s-operators (${{ inputs.branch_name }})"

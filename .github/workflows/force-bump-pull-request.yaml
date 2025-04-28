@@ -69,5 +69,5 @@ jobs:
         title: "openstack-k8s-operators dependency bump branch: ${{ inputs.branch_name }}"
         branch: "openstack-dependency-bump/${{ inputs.branch_name }}"
         commit-message: "Update openstack-k8s-operators (${{ inputs.branch_name }})"
-        committer: openstack-k8s-operators-ci@github.com
-        author: openstack-k8s-operators-ci@github.com
+        committer: openstack-k8s-operators-ci <openstack-k8s-operators-ci@github.com>
+        author: openstack-k8s-operators-ci <openstack-k8s-operators-ci@github.com>

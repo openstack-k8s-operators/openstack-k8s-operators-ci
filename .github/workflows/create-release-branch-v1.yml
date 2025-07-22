@@ -1,0 +1,606 @@
+# .github/workflows/create-release-branch-v1.yml
+name: Create Feature Branches in Repos v1
+
+on:
+  # This workflow can be run manually from the Actions tab.
+  workflow_dispatch:
+    inputs:
+      BRANCH_NAME:
+        description: 'The name of the new feature/release branch to create, e.g. 18.0-fr3 .'
+        required: true
+        type: string
+      NEW_VERSION:
+        description: 'The new version to set in the Makefile on the main/source branch, e.g. 0.5 .'
+        required: true
+        type: string
+      FORCE_BUMP_BRANCHES:
+        description: 'The new list of branches for the force-bump-branches.yaml workflow, e.g. ["main", "18.0-fr3"] .'
+        required: true
+        type: string
+      DRY_RUN:
+        description: 'Test Run! Run without pushing any changes. Disable to apply changes.'
+        required: false
+        type: boolean
+        default: true
+      CREATE_RELEASE_BRANCHES:
+        description: 'Enable creating release branches and updating the release branch'
+        required: false
+        type: boolean
+        default: true
+      UPDATE_OPENSTACK_OPERATOR:
+        description: 'Enable updating openstack-operator main branch'
+        required: false
+        type: boolean
+        default: true
+      UPDATE_CI_WORKFLOWS:
+        description: 'Enable updating openstack-k8s-operators-ci workflows'
+        required: false
+        type: boolean
+        default: true
+      RETAG_RABBITMQ_OPERATOR:
+        description: 'Enable retag-and-push-rabbitmq-cluster-operator-index'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  create-branches:
+    runs-on: ubuntu-latest
+    env:
+      # Use current org as the ORG_NAME
+      ORG_NAME: ${{ github.repository_owner }}
+      # --- CONFIGURATION FROM INPUTS ---
+      BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
+      NEW_VERSION: ${{ inputs.NEW_VERSION }}
+      FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
+      DRY_RUN: ${{ inputs.DRY_RUN }}
+      # 'The name of the version variable in the Makefile.'
+      VERSION_VARIABLE: 'VERSION'
+      # 'The name of the branch variable in the Makefile.'
+      BRANCH_VARIABLE: 'BRANCH'
+      # 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
+      OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
+      # 'The branch that must exist in a repo for it to be processed.'
+      TRIGGER_BRANCH: 'olive'
+      # 'The branch to create the new branch from.'
+      SOURCE_BRANCH: 'main'
+      # 'Timeout for git operations (in seconds)'
+      GIT_TIMEOUT: '300'
+    steps:
+      - name: Generate a token from the GitHub App
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # request an app token for the org instead of just the repo
+          # to be able to process all repos in the org.
+          owner: ${{ env.ORG_NAME }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          echo "yq version $(yq --version) installed."
+
+      - name: Validate Inputs
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -e
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
+            echo "Error: The 'FORCE_BUMP_BRANCHES' input "${FORCE_BUMP_BRANCHES}" is not a valid YAML array."
+            echo "Please provide it in the format [\"item1\", \"item2\"]."
+            exit 1
+          fi
+ 
+          if [[ -z "$BRANCH_NAME" ]] || [[ -z "$NEW_VERSION" ]]; then
+            echo "Error: Required inputs BRANCH_NAME or NEW_VERSION were not provided."
+            exit 1
+          fi
+          
+          # Validate that BRANCH_NAME is included in FORCE_BUMP_BRANCHES
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e "contains([\"${BRANCH_NAME}\"])" >/dev/null 2>&1; then
+            echo "Error: BRANCH_NAME '${BRANCH_NAME}' must be included in FORCE_BUMP_BRANCHES list."
+            echo "Current FORCE_BUMP_BRANCHES: ${FORCE_BUMP_BRANCHES}"
+            echo "Please add '${BRANCH_NAME}' to the FORCE_BUMP_BRANCHES array."
+            exit 1
+          fi
+          
+          # Validate GitHub App has sufficient permissions
+          echo "Validating GitHub App permissions..."
+          if ! gh auth status >/dev/null 2>&1; then
+            echo "Error: GitHub App token authentication failed."
+            exit 1
+          fi
+          
+          # Test API access to organization
+          if ! gh api "orgs/${ORG_NAME}" >/dev/null 2>&1; then
+            echo "Error: Cannot access organization '${ORG_NAME}'. Check GitHub App permissions."
+            exit 1
+          fi
+          
+          echo "✅ Inputs and permissions validated successfully."
+ 
+      - name: Checkout code (for the workflow itself)
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Create Function Library
+        run: |
+          set -e
+
+          # Use a heredoc to write a multi-line script file.
+          # This file will contain all your reusable functions.
+          cat <<'EOF' > workflow_functions.sh
+          #!/bin/bash
+
+          # A function to handle committing and pushing changes.
+          # Arguments: 1: Commit Message, 2: File(s) to add, 3: Branch to push
+          # Returns: 0 on success, 1 on failure
+          commit_and_push() {
+            local commit_message="$1"
+            local files_to_add="$2"
+            local branch_to_push="$3"
+
+            if ! git diff --quiet -- $files_to_add; then
+              echo "Showing changes for branch '${branch_to_push}':"
+              git diff -- $files_to_add
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Commit '${commit_message}' not created for branch '${branch_to_push}'."
+                return 0
+              else
+                git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]' || return 1
+                git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com' || return 1
+                git add $files_to_add || return 1
+                git commit -m "$commit_message" || return 1
+                echo "Pushing changes to ${branch_to_push}..."
+                retry_command 3 5 "Pushing to ${branch_to_push}" git push origin ${branch_to_push} || return 1
+              fi
+            else
+              echo "No changes detected in '${files_to_add}'. Nothing to commit."
+            fi
+            return 0
+          }
+
+          # Updates a value in a YAML file, automatically detecting the type of the existing node.
+          # Arguments: 1: File Path, 2: YQ Target Path, 3: New Value
+          update_yaml_value() {
+            local file_path="$1"
+            local yq_path="$2"
+            local new_value="$3"
+
+            if [ ! -f "${file_path}" ]; then echo "Error: File '${file_path}' not found. Skipping."; return; fi
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Error: Path '${yq_path}' not found in '${file_path}'."; return; fi
+            
+            # Get the tag of the existing node to determine its type
+            local current_tag
+            current_tag=$(yq e "(${yq_path}) | tag" "${file_path}")
+
+            if [ "$current_tag" = "!!seq" ]; then
+              # It's an array, treat new value as a literal so yq can parse it
+              echo "Path '${yq_path}' is an array. Replacing with new value: ${new_value}"
+              yq -i "${yq_path} = ${new_value}" "${file_path}"
+            else
+              # It's a scalar (string, int, etc.), treat new value as a string
+              echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
+              yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
+            fi
+          } 
+
+          # Reads a value from a YAML file using a yq path.
+          # Arguments: 1: File Path, 2: YQ Target Path
+          get_yaml_value() {
+            local file_path="$1"
+            local yq_path="$2"
+
+            # Check if the file exists
+            if [ ! -f "${file_path}" ]; then echo "Error: File '${file_path}' not found. Skipping." >&2; return; fi
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Error: Path '${yq_path}' not found in '${file_path}'."; return; fi
+
+            # If checks pass, get and echo the value
+            yq e "${yq_path}" "${file_path}"
+          }
+          # Enhanced error handling function
+          handle_repo_error() {
+            local repo_name="$1"
+            local error_message="$2"
+            local temp_dir="$3"
+            
+            echo "❌ CRITICAL ERROR in repository: ${repo_name}"
+            echo "Error: ${error_message}"
+            
+            # Cleanup
+            if [[ -n "$temp_dir" && -d "$temp_dir" ]]; then
+              cd .. && rm -rf "$temp_dir"
+            fi
+            
+            # Fail the entire workflow
+            echo "::error::Repository ${repo_name} failed: ${error_message}"
+            exit 1
+          }
+
+          # Enhanced success tracking
+          track_repo_success() {
+            local repo_name="$1"
+            echo "✅ Successfully processed: ${repo_name}"
+            echo "${repo_name}" >> /tmp/successful_repos.txt
+          }
+
+          # Retry function for transient failures
+          # Arguments: 1: max_retries, 2: delay_seconds, 3: command_description, 4+: command and args
+          retry_command() {
+            local max_retries=$1
+            local delay=$2
+            local description="$3"
+            shift 3
+            
+            local attempt=1
+            while [ $attempt -le $max_retries ]; do
+              echo "Attempt $attempt of $max_retries: $description"
+              if timeout_command "$@"; then
+                return 0
+              fi
+              
+              if [ $attempt -eq $max_retries ]; then
+                echo "❌ Failed after $max_retries attempts: $description"
+                return 1
+              fi
+              
+              echo "⚠️ Attempt $attempt failed, retrying in ${delay}s..."
+              sleep $delay
+              ((attempt++))
+            done
+          }
+
+          # Timeout wrapper for commands
+          # Arguments: 1+: command and args
+          timeout_command() {
+            timeout "${GIT_TIMEOUT}" "$@"
+          }
+
+          # Cleanup function for graceful interruption handling
+          cleanup() {
+            echo "🧹 Cleaning up temporary directories..."
+            find /tmp -name "tmp.*" -type d -user "$(whoami)" -exec rm -rf {} + 2>/dev/null || true
+            if [[ -n "${TEMP_DIR:-}" && -d "${TEMP_DIR}" ]]; then
+              echo "🧹 Removing current temp directory: ${TEMP_DIR}"
+              rm -rf "${TEMP_DIR}" 2>/dev/null || true
+            fi
+            exit 1
+          }
+
+          # Set up cleanup trap (call this in each script that needs it)
+          setup_cleanup_trap() {
+            trap cleanup INT TERM
+          }
+          EOF
+
+      - name: Create release branches and update the release branch
+        if: inputs.CREATE_RELEASE_BRANCHES
+        env:
+          # Use the token generated from the GitHub App
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -e # Exit immediately if a command exits with a non-zero status.
+          source ./workflow_functions.sh
+          
+          # Set up cleanup trap for graceful interruption handling
+          setup_cleanup_trap
+ 
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "!!! --- Running in DRY RUN mode. No changes will be pushed. --- !!!"
+          fi
+ 
+          echo "Running with the following configuration:"
+          echo "Organization: ${ORG_NAME}"
+          echo "Feature Branch Name: ${BRANCH_NAME}"
+          echo "New Version on main: ${NEW_VERSION}"
+          echo "New FORCE_BUMP_BRANCHES: ${FORCE_BUMP_BRANCHES}"
+          echo "Trigger Branch: ${TRIGGER_BRANCH}"
+          echo "Source Branch: ${SOURCE_BRANCH}"
+          echo "-------------------------------------------"
+ 
+          echo "Searching for repositories in organization '${ORG_NAME}'..."
+          # Get active (non-archived) repositories
+          repos=$(gh repo list $ORG_NAME --limit 1000 --json name,isArchived --jq '.[] | select(.isArchived == false) | .name')
+
+          if [ -z "$repos" ]; then
+            echo "No active repositories found in the organization or permissions are missing."
+            exit 1
+          fi
+          
+          total_repos=$(echo "$repos" | wc -w)
+          echo "Found ${total_repos} active repositories to process."
+
+          created_repos=""
+          failed_repos=""
+          skipped_repos=""
+
+          # Initialize tracking files
+          touch /tmp/successful_repos.txt
+          touch /tmp/failed_repos.txt
+          touch /tmp/skipped_repos.txt
+
+          current_repo=1
+          for repo_name in $repos; do
+            echo "--- Processing REPOSITORY: ${repo_name} (${current_repo}/${total_repos}) ---"
+
+            if [[ "$repo_name" == "rabbitmq-cluster-operator" ]]; then 
+              echo "ℹ️ Skipping ${repo_name} (handled separately)"
+              echo "${repo_name}" >> /tmp/skipped_repos.txt
+              ((current_repo++))
+              continue
+            fi
+
+            # Check if trigger branch exists - FAIL if API call fails
+            if ! gh api "repos/${ORG_NAME}/${repo_name}/branches/${TRIGGER_BRANCH}" >/dev/null 2>&1; then
+              echo "❌ Trigger branch '${TRIGGER_BRANCH}' not found in ${repo_name}. Skipping."
+              echo "${repo_name}" >> /tmp/skipped_repos.txt
+              ((current_repo++))
+              continue
+            fi
+
+            echo "✅ Trigger branch '${TRIGGER_BRANCH}' found in ${repo_name}."
+
+            TEMP_DIR=$(mktemp -d)
+            echo "Cloning repository into ${TEMP_DIR}..."
+            
+            # FAIL if clone fails (with retry for transient network issues)
+            if ! retry_command 3 5 "Cloning ${repo_name}" git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/${repo_name}.git" "$TEMP_DIR"; then
+              handle_repo_error "${repo_name}" "Failed to clone repository after retries" "$TEMP_DIR"
+            fi
+ 
+            cd "$TEMP_DIR" || handle_repo_error "${repo_name}" "Failed to change to repository directory" "$TEMP_DIR"
+
+            # FAIL if source branch doesn't exist
+            if ! git show-ref --verify --quiet "refs/remotes/origin/${SOURCE_BRANCH}"; then
+              handle_repo_error "${repo_name}" "Source branch '${SOURCE_BRANCH}' does not exist"
+            fi
+
+            # Skip if branch already exists (not an error)
+            if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH_NAME}"; then
+              echo "ℹ️ Branch '${BRANCH_NAME}' already exists in ${repo_name}. Skipping this repository."
+              echo "${repo_name}" >> /tmp/skipped_repos.txt
+              cd .. && rm -rf "$TEMP_DIR"
+              ((current_repo++))
+              continue
+            fi
+ 
+            echo "Creating branch '${BRANCH_NAME}' from '${SOURCE_BRANCH}'..."
+            
+            # FAIL if checkout operations fail
+            if ! timeout_command git checkout ${SOURCE_BRANCH}; then
+              handle_repo_error "${repo_name}" "Failed to checkout source branch '${SOURCE_BRANCH}'" "$TEMP_DIR"
+            fi
+            
+            if ! timeout_command git checkout -b ${BRANCH_NAME}; then
+              handle_repo_error "${repo_name}" "Failed to create new branch '${BRANCH_NAME}'" "$TEMP_DIR"
+            fi
+
+            if [ -f "Makefile" ]; then
+              echo "Makefile found. Checking for variables to update on new branch..."
+              if grep -qE "^${BRANCH_VARIABLE}\s*(\?=|=)" Makefile; then
+                if ! sed -i -E "s/^(${BRANCH_VARIABLE}\s*(\?=|=)\s*).*/\1${BRANCH_NAME}/" Makefile; then
+                  handle_repo_error "${repo_name}" "Failed to update BRANCH variable in Makefile" "$TEMP_DIR"
+                fi
+              fi
+              if [[ "$repo_name" == "install_yamls" ]]; then
+                if grep -qE "^${OPENSTACK_K8S_TAG_VARIABLE}\s*(\?=|=)" Makefile; then
+                  if ! sed -i -E "s/^((${OPENSTACK_K8S_TAG_VARIABLE})\s*(\?=|=)\s*).*/\1${BRANCH_NAME}-latest/" Makefile; then
+                    handle_repo_error "${repo_name}" "Failed to update OPENSTACK_K8S_TAG variable in Makefile" "$TEMP_DIR"
+                  fi
+                fi
+              fi
+              
+              # FAIL if commit and push fails
+              if ! commit_and_push "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile" "${BRANCH_NAME}"; then
+                handle_repo_error "${repo_name}" "Failed to commit and push Makefile changes" "$TEMP_DIR"
+              fi
+            else
+              echo "No Makefile found. Creating branch without Makefile changes."
+              # Still need to push the branch even without Makefile changes
+              if [ "$DRY_RUN" != "true" ]; then
+                if ! retry_command 3 5 "Pushing new branch ${BRANCH_NAME}" git push origin ${BRANCH_NAME}; then
+                  handle_repo_error "${repo_name}" "Failed to push new branch after retries" "$TEMP_DIR"
+                fi
+              fi
+            fi
+
+            # Track successful repository
+            track_repo_success "${repo_name}"
+            created_repos+="- ${repo_name}\n"
+
+            cd .. && rm -rf "$TEMP_DIR"
+            ((current_repo++))
+          done
+
+          echo "-------------------------------------------"
+          echo "🔍 FINAL WORKFLOW STATUS REPORT"
+          echo "-------------------------------------------"
+          
+          # Count results
+          successful_count=$(wc -l < /tmp/successful_repos.txt)
+          skipped_count=$(wc -l < /tmp/skipped_repos.txt)
+          total_checked=$(echo "$repos" | wc -w)
+          
+          echo "📊 Processing Summary:"
+          echo "  • Total repositories checked: ${total_checked}"
+          echo "  • Successfully processed: ${successful_count}"
+          echo "  • Skipped (no trigger branch or already exists): ${skipped_count}"
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            echo ""
+            echo "🧪 DRY RUN COMPLETE - No actual changes were made"
+            echo "The following repositories would have had the branch '${BRANCH_NAME}' created:"
+          else
+            echo ""
+            echo "✅ PRODUCTION RUN COMPLETE"
+            echo "The following repositories now have the branch '${BRANCH_NAME}':"
+          fi
+
+          if [[ -n "$created_repos" ]]; then
+            echo -e "$created_repos"
+          else
+            echo "  • No new branches were created."
+          fi
+          
+          if [ -s /tmp/skipped_repos.txt ]; then
+            echo ""
+            echo "ℹ️ Skipped repositories:"
+            while read -r repo; do
+              echo "  • ${repo}"
+            done < /tmp/skipped_repos.txt
+          fi
+          
+          echo "-------------------------------------------"
+
+      - name: Update openstack-operator main branch
+        # Only run if previous steps were successful and parameter is enabled
+        if: success() && inputs.UPDATE_OPENSTACK_OPERATOR
+        env:
+          # Use the token generated from the GitHub App
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -e # Exit immediately if a command exits with a non-zero status.
+          source ./workflow_functions.sh
+          
+          # Set up cleanup trap for graceful interruption handling
+          setup_cleanup_trap
+ 
+          echo "--- Updating REPOSITORY: openstack-operator ---"
+          TEMP_DIR=$(mktemp -d)
+          echo "Cloning repository into ${TEMP_DIR}..."
+          
+          if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-operator.git" "$TEMP_DIR"; then
+            echo "::error::Failed to clone openstack-operator repository"
+            exit 1
+          fi
+          
+          cd "$TEMP_DIR" || { echo "::error::Failed to change to openstack-operator directory"; exit 1; }
+
+          # Update workflows on the main branch
+          if ! git checkout main; then
+            echo "::error::Failed to checkout main branch in openstack-operator"
+            exit 1
+          fi
+          
+          if ! git pull origin main; then
+            echo "::error::Failed to pull latest changes from main branch in openstack-operator"
+            exit 1
+          fi
+
+          # change to the Makefile
+          if [ -f "Makefile" ]; then
+            FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
+            if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
+              sed -i -E "s/^(${VERSION_VARIABLE}\s*(:=|\?=|=)).*/\1 ${FULL_MAKEFILE_VERSION}/" Makefile
+              commit_and_push "Bump Makefile version to ${FULL_MAKEFILE_VERSION}" "Makefile" "${SOURCE_BRANCH}"
+            else
+              echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
+            fi
+          else
+            echo "No Makefile found. No changes pushed to ${SOURCE_BRANCH}."
+          fi
+
+          # change to hack/fake_minor_update.sh
+          if [ -f "hack/fake_minor_update.sh" ]; then
+            if grep -qE "^${VERSION_VARIABLE}=" hack/fake_minor_update.sh; then
+              sed -i -E "s/^(${VERSION_VARIABLE}=).*/\1${NEW_VERSION}/" hack/fake_minor_update.sh
+              commit_and_push "Bump fake_minor_update.sh version to ${NEW_VERSION}" "hack/fake_minor_update.sh" "${SOURCE_BRANCH}"
+            else
+              echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
+            fi
+          else
+            echo "No hack/fake_minor_update.sh found. No changes pushed to ${SOURCE_BRANCH}."
+          fi
+
+          # changes to .github/workflows/catalog-openstack-operator-upgrades.yaml
+          WORKFLOW_FILE=".github/workflows/catalog-openstack-operator-upgrades.yaml"
+          if [ -f "${WORKFLOW_FILE}" ]; then
+            # 1. Find the index of the step to update
+            index=$(yq '.jobs.build-catalog.steps | to_entries | .[] | select(.value.name == "Create the catalog index") | .key' ${WORKFLOW_FILE})
+ 
+            # 2. Check if an index was found
+            if [ -z "$index" ]; then
+              echo "Step 'Create the catalog index' not found."
+              exit 1
+            fi
+
+            echo "Found 'Create the catalog index' step at index: $index"
+            CURRENT_VERSION=$(get_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.MAIN_VERSION")
+            FULL_NEW_VERSION="${NEW_VERSION}.0"
+            # 3. Use the index to update the 'image' field in place (-i)
+            update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.MAIN_VERSION" "${FULL_NEW_VERSION}"
+            update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.FEATURE_RELEASE_VERSION" "${CURRENT_VERSION}"
+            update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.FEATURE_RELEASE_BRANCH" "${BRANCH_NAME}"
+            commit_and_push "Bump version in ${WORKFLOW_FILE} to ${FULL_NEW_VERSION}" "${WORKFLOW_FILE}" "${SOURCE_BRANCH}"
+          else
+            echo "No ${WORKFLOW_FILE} found. No changes pushed to ${SOURCE_BRANCH}."
+          fi
+
+          cd .. && rm -rf "$TEMP_DIR"
+
+      - name: Update openstack-k8s-operators-ci workflows
+        # Only run if previous steps were successful and parameter is enabled
+        if: success() && inputs.UPDATE_CI_WORKFLOWS
+        env:
+          # Use the token generated from the GitHub App
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -e # Exit immediately if a command exits with a non-zero status.
+          source ./workflow_functions.sh
+          
+          # Set up cleanup trap for graceful interruption handling
+          setup_cleanup_trap
+
+          echo "--- Updating REPOSITORY: openstack-k8s-operators-ci ---"
+          TEMP_DIR=$(mktemp -d)
+          echo "Cloning repository into ${TEMP_DIR}..."
+          
+          if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-k8s-operators-ci.git" "$TEMP_DIR"; then
+            echo "::error::Failed to clone openstack-k8s-operators-ci repository"
+            exit 1
+          fi
+          
+          cd "$TEMP_DIR" || { echo "::error::Failed to change to openstack-k8s-operators-ci directory"; exit 1; }
+
+          # Update workflows on the main branch
+          if ! git checkout main; then
+            echo "::error::Failed to checkout main branch in openstack-k8s-operators-ci"
+            exit 1
+          fi
+          
+          if ! git pull origin main; then
+            echo "::error::Failed to pull latest changes from main branch in openstack-k8s-operators-ci"
+            exit 1
+          fi
+
+          update_yaml_value ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
+          update_yaml_value ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
+
+          # Commit and push changes if any were made
+          commit_and_push "ci: Update workflow defaults for ${BRANCH_NAME}" ".github/workflows/" "${SOURCE_BRANCH}"
+
+          cd .. && rm -rf "$TEMP_DIR"
+          echo "Workflow finished."
+
+  retag-and-push-rabbitmq-cluster-operator-index:
+    # Only run if not a dry run, parameter is enabled, and create-branches job succeeded
+    if: inputs.DRY_RUN == false && inputs.RETAG_RABBITMQ_OPERATOR && needs.create-branches.result == 'success'
+    needs: create-branches
+    uses: ./.github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
+    with:
+      new_tag: "${{ inputs.BRANCH_NAME }}-latest"
+    secrets:
+      IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+

@@ -32,6 +32,8 @@ jobs:
 
     - name: run make force-bump, tidy, manifests, generate
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         BRANCH='${{ inputs.branch_name }}' make force-bump
         make tidy
@@ -40,6 +42,8 @@ jobs:
     - name: run make bindata
       if: inputs.operator_name == 'openstack'
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         make bindata
 

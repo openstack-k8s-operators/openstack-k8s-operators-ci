@@ -6,6 +6,9 @@ on:
       operator_name:
         required: true
         type: string
+      custom_image:
+        default: 'quay.io/openstack-k8s-operators/openstack-k8s-operators-ci-build-tools:latest'
+        type: string
     secrets:
       FORCE_BUMP_PULL_REQUEST_PAT:
         required: false
@@ -21,5 +24,6 @@ jobs:
     with:
       operator_name: ${{ inputs.operator_name }}
       branch_name: ${{ matrix.branch }}
+      custom_image: ${{ inputs.custom_image }}
     secrets:
       FORCE_BUMP_PULL_REQUEST_PAT: ${{ secrets.FORCE_BUMP_PULL_REQUEST_PAT }}

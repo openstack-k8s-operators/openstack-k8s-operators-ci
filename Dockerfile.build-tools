@@ -1,0 +1,102 @@
+FROM registry.access.redhat.com/ubi9/ubi:latest
+
+# Tool versions from Makefile (only for pre-built binaries)
+ENV KUSTOMIZE_VERSION=v5.5.0
+ENV KUTTL_VERSION=0.17.0
+ENV GOTOOLCHAIN_VERSION=go1.21.0
+ENV OC_VERSION=4.16.0
+ENV OPERATOR_SDK_VERSION=v1.31.0
+ENV GOLANGCI_LINT_VERSION=v1.59.1
+ENV OPM_VERSION=v1.29.0
+
+# Set workspace and bin directory
+ENV WORKSPACE_DIR=/tmp/workspace
+ENV LOCALBIN=${WORKSPACE_DIR}/bin
+ENV PATH=${LOCALBIN}:$PATH
+
+# Install system dependencies
+# First install essential tools, then swap curl packages
+RUN dnf update -y && \
+    dnf install -y \
+        tar \
+        gzip \
+        wget \
+        which \
+        make \
+        git \
+        jq \
+        skopeo \
+        file \
+        && dnf clean all
+
+# Replace curl-minimal with full curl in separate step
+RUN dnf swap -y curl-minimal curl
+
+# Create workspace and bin directory
+RUN mkdir -p ${LOCALBIN}
+
+# Install Go with specified version
+RUN curl -fsSL https://dl.google.com/go/go1.21.0.linux-amd64.tar.gz | tar -C /usr/local -xz
+ENV PATH=/usr/local/go/bin:$PATH
+ENV GOPATH=/go
+ENV GOBIN=${LOCALBIN}
+
+# Install kustomize
+RUN curl -Ss "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | \
+    bash -s -- ${KUSTOMIZE_VERSION#v} ${LOCALBIN}
+
+# Note: Tools requiring 'go install' are excluded since their version dependency is managed
+# via the go.mod file.
+
+# Install kubectl-kuttl
+RUN curl -L -o ${LOCALBIN}/kubectl-kuttl \
+    https://github.com/kudobuilder/kuttl/releases/download/v${KUTTL_VERSION}/kubectl-kuttl_${KUTTL_VERSION}_linux_x86_64 && \
+    chmod +x ${LOCALBIN}/kubectl-kuttl
+
+# Install operator-sdk
+RUN curl -sSLo ${LOCALBIN}/operator-sdk \
+    https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk_linux_amd64 && \
+    chmod +x ${LOCALBIN}/operator-sdk
+
+# Install golangci-lint
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
+    sh -s -- -b ${LOCALBIN} ${GOLANGCI_LINT_VERSION}
+
+# Install yq
+RUN cd ${LOCALBIN} && \
+    wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64.tar.gz -O - | \
+    tar xz && mv yq_linux_amd64 ${LOCALBIN}/yq
+
+# Install oc (OpenShift CLI)
+RUN cd ${LOCALBIN} && \
+    wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz -O - | \
+    tar xz
+
+# Install opm
+RUN curl -sSLo ${LOCALBIN}/opm \
+    https://github.com/operator-framework/operator-registry/releases/download/${OPM_VERSION}/linux-amd64-opm && \
+    chmod +x ${LOCALBIN}/opm
+
+# Git is already installed above, no need to reinstall
+
+# Set working directory (tools available via PATH)
+WORKDIR /workspace
+
+# Verify installations
+RUN echo "=== Tool Versions ===" && \
+    echo "Go: $(go version)" && \
+    echo "Kustomize: $(kustomize version --short)" && \
+    echo "Kubectl-kuttl: $(kubectl-kuttl version)" && \
+    echo "Operator-SDK: $(operator-sdk version)" && \
+    echo "Golangci-lint: $(golangci-lint version)" && \
+    echo "YQ: $(yq --version)" && \
+    echo "OC: $(oc version --client)" && \
+    echo "OPM: $(opm version)" && \
+    echo "JQ: $(jq --version)" && \
+    echo "Skopeo: $(skopeo --version)" && \
+    echo "File: $(file --version)" && \
+    echo "PATH: $PATH" && \
+    ls -la ${LOCALBIN}
+
+# Default command
+CMD ["/bin/bash"] 

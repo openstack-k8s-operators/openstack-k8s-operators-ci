@@ -1,0 +1,256 @@
+# .github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
+
+name: Tag RabbitMQ Index Image for Feature Release
+
+# This workflow can be triggered manually or called by another workflow
+on:
+  # Allow manual execution from the Actions tab
+  workflow_dispatch:
+    inputs:
+      new_tag:
+        description: "The new feature release tag to apply (e.g., 18.0-fr4-latest)"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform a dry run without actually pushing the image"
+        required: false
+        type: boolean
+        default: false
+      force_overwrite:
+        description: "Force overwrite if target tag already exists"
+        required: false
+        type: boolean
+        default: false
+
+  # Allow this workflow to be called by another workflow
+  workflow_call:
+    inputs:
+      new_tag:
+        description: "The new feature release tag to apply (e.g., 18.0-fr4-latest)"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform a dry run without actually pushing the image"
+        required: false
+        type: boolean
+        default: false
+      force_overwrite:
+        description: "Force overwrite if target tag already exists"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      IMAGENAMESPACE:
+        required: true
+      QUAY_USERNAME:
+        required: true
+      QUAY_PASSWORD:
+        required: true
+
+env:
+  imageregistry: 'quay.io'
+  imagenamespace: ${{ secrets.IMAGENAMESPACE || secrets.QUAY_USERNAME }}
+  image: 'rabbitmq-cluster-operator-index'
+
+jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      valid-tag: ${{ steps.validate.outputs.valid }}
+      missing-secrets: ${{ steps.check-secrets.outputs.missing }}
+    steps:
+      - name: Check required secrets are set
+        id: check-secrets
+        run: |
+          if [[ -z "${{ env.imagenamespace }}" ]]; then
+            echo "::error title=Missing required secrets::Check IMAGENAMESPACE, QUAY_USERNAME and QUAY_PASSWORD exist!"
+            echo "missing=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "missing=false" >> $GITHUB_OUTPUT
+
+      - name: Validate tag format
+        id: validate
+        run: |
+          TAG="${{ github.event.inputs.new_tag || inputs.new_tag }}"
+          echo "Validating tag format: ${TAG}"
+          
+          # Basic validation - adjust regex pattern as needed
+          if [[ ! "$TAG" =~ ^[0-9]+\.[0-9]+-fr[0-9]+-[a-zA-Z0-9]+$ ]]; then
+            echo "::warning title=Tag format warning::Tag '${TAG}' doesn't match expected pattern (e.g., 18.0-fr4-latest)"
+          fi
+          
+          # Check for dangerous characters
+          if [[ "$TAG" =~ [^a-zA-Z0-9._-] ]]; then
+            echo "::error title=Invalid tag::Tag contains invalid characters. Only alphanumeric, dots, hyphens, and underscores are allowed."
+            echo "valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "valid=true" >> $GITHUB_OUTPUT
+          echo "Tag validation passed: ${TAG}"
+
+  retag-and-push:
+    needs: validate-inputs
+    name: Retag and Push Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: needs.validate-inputs.outputs.missing-secrets != 'true' && needs.validate-inputs.outputs.valid-tag == 'true'
+
+    steps:
+      - name: Set up environment variables
+        run: |
+          echo "SOURCE_IMAGE=${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}:latest" >> $GITHUB_ENV
+          echo "TARGET_IMAGE=${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}:${{ github.event.inputs.new_tag || inputs.new_tag }}" >> $GITHUB_ENV
+          echo "DRY_RUN=${{ github.event.inputs.dry_run || inputs.dry_run || 'false' }}" >> $GITHUB_ENV
+          echo "FORCE_OVERWRITE=${{ github.event.inputs.force_overwrite || inputs.force_overwrite || 'false' }}" >> $GITHUB_ENV
+
+      - name: Log in to Quay.io
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.imageregistry }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Check if source 'latest' tag exists
+        id: check-source
+        run: |
+          set -euo pipefail
+          
+          echo "Checking for existence of source image: ${SOURCE_IMAGE}"
+          
+          if ! podman manifest inspect "${SOURCE_IMAGE}" >/dev/null 2>&1; then
+            echo "::error title=Source tag not found::The source tag '${SOURCE_IMAGE}' does not exist. Cannot proceed."
+            exit 1
+          fi
+          
+          echo "✅ Source tag found: ${SOURCE_IMAGE}"
+          
+          # Get image digest for verification
+          DIGEST=$(podman inspect "${SOURCE_IMAGE}" --format '{{.Digest}}' 2>/dev/null || echo "unknown")
+          echo "Source image digest: ${DIGEST}"
+          echo "source-digest=${DIGEST}" >> $GITHUB_OUTPUT
+
+      - name: Check if target tag already exists
+        id: check-target
+        run: |
+          set -euo pipefail
+          
+          echo "Checking if target tag already exists: ${TARGET_IMAGE}"
+          
+          if podman manifest inspect "${TARGET_IMAGE}" >/dev/null 2>&1; then
+            if [[ "${FORCE_OVERWRITE}" == "true" ]]; then
+              echo "::warning title=Target exists::Target tag '${TARGET_IMAGE}' already exists but will be overwritten due to force_overwrite=true"
+              echo "exists=true" >> $GITHUB_OUTPUT
+            else
+              echo "::error title=Target exists::Target tag '${TARGET_IMAGE}' already exists. Use force_overwrite=true to overwrite."
+              exit 1
+            fi
+          else
+            echo "✅ Target tag is available: ${TARGET_IMAGE}"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pull source image
+        run: |
+          set -euo pipefail
+          
+          echo "📥 Pulling source image: ${SOURCE_IMAGE}"
+          
+          if ! podman pull "${SOURCE_IMAGE}"; then
+            echo "::error title=Pull failed::Failed to pull source image '${SOURCE_IMAGE}'"
+            exit 1
+          fi
+          
+          echo "✅ Successfully pulled: ${SOURCE_IMAGE}"
+          
+          # Verify the pulled image
+          podman images "${SOURCE_IMAGE}" --format "table {{.Repository}}:{{.Tag}} {{.ID}} {{.Created}} {{.Size}}"
+
+      - name: Create and verify new tag
+        run: |
+          set -euo pipefail
+          
+          echo "🏷️ Creating new tag: ${{ github.event.inputs.new_tag || inputs.new_tag }}"
+          
+          if ! podman tag "${SOURCE_IMAGE}" "${TARGET_IMAGE}"; then
+            echo "::error title=Tag failed::Failed to create tag '${TARGET_IMAGE}'"
+            exit 1
+          fi
+          
+          echo "✅ Successfully created tag: ${TARGET_IMAGE}"
+          
+          # Verify the tag was created
+          podman images "${TARGET_IMAGE}" --format "table {{.Repository}}:{{.Tag}} {{.ID}} {{.Created}} {{.Size}}"
+
+      - name: Push new tag (or dry run)
+        id: push-tag
+        run: |
+          set -euo pipefail
+          
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            echo "🔍 DRY RUN MODE: Would push ${TARGET_IMAGE}"
+            echo "To actually push, set dry_run=false"
+            echo "pushed=false" >> $GITHUB_OUTPUT
+          else
+            echo "📤 Pushing new tag to registry: ${TARGET_IMAGE}"
+            
+            if ! podman push "${TARGET_IMAGE}"; then
+              echo "::error title=Push failed::Failed to push image '${TARGET_IMAGE}'"
+              exit 1
+            fi
+            
+            echo "✅ Successfully pushed: ${TARGET_IMAGE}"
+            echo "pushed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify pushed image (if not dry run)
+        if: steps.push-tag.outputs.pushed == 'true'
+        run: |
+          set -euo pipefail
+          
+          echo "🔍 Verifying pushed image: ${TARGET_IMAGE}"
+          
+          # Wait a moment for registry to propagate
+          sleep 5
+          
+          if ! podman manifest inspect "${TARGET_IMAGE}" >/dev/null 2>&1; then
+            echo "::error title=Verification failed::Cannot verify pushed image '${TARGET_IMAGE}'"
+            exit 1
+          fi
+          
+          echo "✅ Verification successful: ${TARGET_IMAGE}"
+
+      - name: Generate summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## 🐰 RabbitMQ Index Image Tagging Results
+          
+          | Property | Value |
+          |----------|-------|
+          | **Source Image** | `${{ env.SOURCE_IMAGE }}` |
+          | **Target Image** | `${{ env.TARGET_IMAGE }}` |
+          | **New Tag** | `${{ github.event.inputs.new_tag || inputs.new_tag }}` |
+          | **Dry Run** | `${{ env.DRY_RUN }}` |
+          | **Force Overwrite** | `${{ env.FORCE_OVERWRITE }}` |
+          | **Target Existed** | `${{ steps.check-target.outputs.exists }}` |
+          | **Successfully Pushed** | `${{ steps.push-tag.outputs.pushed }}` |
+          | **Source Digest** | `${{ steps.check-source.outputs.source-digest }}` |
+          
+          ### 📋 Next Steps
+          EOF
+          
+          if [[ "${{ steps.push-tag.outputs.pushed }}" == "true" ]]; then
+            echo "- ✅ Image is ready for use: \`${{ env.TARGET_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔗 View on Quay.io: [Link](https://quay.io/repository/${{ env.imagenamespace }}/${{ env.image }}?tab=tags)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ℹ️ This was a dry run. Set \`dry_run=false\` to actually push the image." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Clean up local images
+        if: always()
+        run: |
+          echo "🧹 Cleaning up local images"
+          podman rmi "${SOURCE_IMAGE}" "${TARGET_IMAGE}" 2>/dev/null || true
+          echo "Cleanup completed"

@@ -9,6 +9,9 @@ on:
       branch_name:
         default: 'main'
         type: string
+      custom_image:
+        default: 'quay.io/openstack-k8s-operators/openstack-k8s-operators-ci-build-tools:latest'
+        type: string
     secrets:
       FORCE_BUMP_PULL_REQUEST_PAT:
         required: false
@@ -18,6 +21,11 @@ jobs:
   force-bump-pr:
     name: Generate a pull request update to the latest openstack-k8s-operators dependencies for the selected operator
     runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.custom_image }}
+      options: --user root
+    env:
+      CUSTOM_TOOLS_PATH: /tmp/workspace/bin
 
     steps:
     - name: Checkout repository
@@ -27,6 +35,9 @@ jobs:
 
     - name: Git config
       run: |
+        # Fix git ownership issue in container
+        git config --global --add safe.directory $GITHUB_WORKSPACE
+        cd $GITHUB_WORKSPACE
         git config user.name "openstack-k8s-operators-ci"
         git config user.email "openstack-k8s-operators-ci@github.com"
 
@@ -34,7 +45,11 @@ jobs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PATH: ${{ env.CUSTOM_TOOLS_PATH }}:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        LOCALBIN: ${{ env.CUSTOM_TOOLS_PATH }}
+        GOTOOLCHAIN: local
       run: |
+        cd $GITHUB_WORKSPACE
         BRANCH='${{ inputs.branch_name }}' make force-bump
         make tidy
         make manifests generate
@@ -44,12 +59,17 @@ jobs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PATH: ${{ env.CUSTOM_TOOLS_PATH }}:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        LOCALBIN: ${{ env.CUSTOM_TOOLS_PATH }}
+        GOTOOLCHAIN: local
       run: |
+        cd $GITHUB_WORKSPACE
         make bindata
 
     - name: Detect if there are local git changes and set a variable
       id: git_diff
       run: |
+        cd $GITHUB_WORKSPACE
         if git diff --quiet; then
             echo "changes=false" >> $GITHUB_OUTPUT
         else

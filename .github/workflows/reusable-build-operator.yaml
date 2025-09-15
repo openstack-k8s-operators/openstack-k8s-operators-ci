@@ -23,10 +23,10 @@ on:
         required: false
         type: string
         default: ./bundle.Dockerfile
-      catalog_extra_bundles_script: # openstack-operator creates a list of pinned bundle images for the catalog/index
+      operator_version: # Example: 0.4.0 for openstack-operator, all other operators use 0.0.1. This corresponds to the CSV version
+        description: 'The operator_version to use (optional). Overrides other logic.'
         required: false
         type: string
-        default: ""
     secrets:
       IMAGENAMESPACE:
         required: true
@@ -237,32 +237,64 @@ jobs:
         source: github
         opm: 'latest'
 
-    - name: Log in to Red Hat Registry
+    - name: Log in to Quay Registry
       uses: redhat-actions/podman-login@v1
       with:
         registry: ${{ env.imageregistry }}
         username: ${{ secrets.QUAY_USERNAME }}
         password: ${{ secrets.QUAY_PASSWORD }}
 
+    - name: Log in to Red Hat Registry
+      uses: redhat-actions/podman-login@v1
+      with:
+        registry: registry.redhat.io
+        username: ${{ secrets.REDHATIO_USERNAME }}
+        password: ${{ secrets.REDHATIO_PASSWORD }}
+
+    - name: Determine Version
+      id: get_csv_version
+      run: |
+        if [[ -n "${{ inputs.operator_version }}" ]]; then
+          echo "Using provided version: ${{ inputs.operator_version }}"
+          echo "version=${{ inputs.operator_version }}" >> $GITHUB_OUTPUT
+        elif [[ "${{ inputs.operator_name }}" == "openstack" ]]; then
+          echo "Operator is 'openstack', setting version to 0.4.0"
+          echo "version=0.4.0" >> $GITHUB_OUTPUT
+        else
+          echo "Defaulting version to 0.0.1"
+          echo "version=0.0.1" >> $GITHUB_OUTPUT
+        fi
+
     - name: Create index image
       shell: bash
       run: |
+        set -x
         pushd "${GITHUB_WORKSPACE}"
-        CATALOG_EXTRA_BUNDLES=""
-        if [ -n "$CATALOG_EXTRA_BUNDLES_SCRIPT" ]; then
-          #NOTE: script is responsible for prefixing a comma
-          CATALOG_EXTRA_BUNDLES=$(/bin/bash $CATALOG_EXTRA_BUNDLES_SCRIPT)
-        fi
-        opm index add --bundles "${REGISTRY}/${BUNDLE_IMAGE}:${GITHUB_SHA}${CATALOG_EXTRA_BUNDLES}" --tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" -u podman --pull-tool podman
+        mkdir -p catalog
+        opm generate dockerfile ./catalog -i registry.redhat.io/openshift4/ose-operator-registry-rhel9:v4.18
+        opm init ${OPERATOR_NAME} --default-channel=alpha --output yaml > catalog/index.yaml
+        opm render "${REGISTRY}/${BUNDLE_IMAGE}:${GITHUB_SHA}" --output yaml >> catalog/index.yaml
+        cat >> catalog/index.yaml << EOF_CAT
+        ---
+        schema: olm.channel
+        package: ${OPERATOR_NAME}
+        name: alpha
+        entries:
+          - name: ${OPERATOR_NAME}.${CSV_VERSION}
+        EOF_CAT
+        cat catalog/index.yaml
+        opm validate catalog
+        podman build -t "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" -f catalog.Dockerfile
         podman tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${INDEX_IMAGE}:${INDEX_IMAGE_TAG}"
         popd
       env:
         REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
         GITHUB_SHA: ${{ github.sha }}
+        OPERATOR_NAME: ${{ inputs.operator_name }}-operator
         BUNDLE_IMAGE: ${{ inputs.operator_name }}-operator-bundle
         INDEX_IMAGE_TAG: ${{ env.latesttag }}
         INDEX_IMAGE: ${{ inputs.operator_name }}-operator-index
-        CATALOG_EXTRA_BUNDLES_SCRIPT: ${{ inputs.catalog_extra_bundles_script }}
+        CSV_VERSION: v${{ steps.get_csv_version.outputs.version }}
 
     - name: Push ${{ inputs.operator_name }}-operator-index To ${{ env.imageregistry }}
       uses: redhat-actions/push-to-registry@v2

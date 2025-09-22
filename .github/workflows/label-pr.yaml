@@ -1,0 +1,24 @@
+name: Add Label to PR
+
+on:
+  workflow_call:
+    inputs:
+      label_name:
+        required: true
+        type: string
+
+jobs:
+  label-pr:
+    name: Label PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add ${{ inputs.label_name }} label on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['${{ inputs.label_name }}']
+            });

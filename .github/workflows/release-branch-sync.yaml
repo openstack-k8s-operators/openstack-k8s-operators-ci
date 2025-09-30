@@ -6,7 +6,7 @@ on:
       source_branch:
         type: string
         required: false
-        default: 18.0-fr3
+        default: main
       target_branch:
         type: string
         required: false

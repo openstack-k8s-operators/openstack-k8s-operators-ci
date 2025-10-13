@@ -385,6 +385,7 @@ jobs:
               handle_repo_error "${repo_name}" "Failed to create new branch '${BRANCH_NAME}'" "$TEMP_DIR"
             fi
 
+            BRANCH_PUSHED=false
             if [ -f "Makefile" ]; then
               echo "Makefile found. Checking for variables to update on new branch..."
               if grep -qE "^${BRANCH_VARIABLE}\s*(\?=|=)" Makefile; then
@@ -400,13 +401,23 @@ jobs:
                 fi
               fi
               
-              # FAIL if commit and push fails
-              if ! commit_and_push "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile" "${BRANCH_NAME}"; then
-                handle_repo_error "${repo_name}" "Failed to commit and push Makefile changes" "$TEMP_DIR"
+              # Check if there are changes to commit and push
+              if ! git diff --quiet -- Makefile; then
+                # FAIL if commit and push fails
+                if ! commit_and_push "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile" "${BRANCH_NAME}"; then
+                  handle_repo_error "${repo_name}" "Failed to commit and push Makefile changes" "$TEMP_DIR"
+                fi
+                BRANCH_PUSHED=true
+              else
+                echo "No changes detected in Makefile."
               fi
             else
-              echo "No Makefile found. Creating branch without Makefile changes."
-              # Still need to push the branch even without Makefile changes
+              echo "No Makefile found."
+            fi
+
+            # Push the branch if it wasn't already pushed via commit_and_push
+            if [ "$BRANCH_PUSHED" = "false" ]; then
+              echo "Pushing branch ${BRANCH_NAME} without Makefile changes."
               if [ "$DRY_RUN" != "true" ]; then
                 if ! retry_command 3 5 "Pushing new branch ${BRANCH_NAME}" git push origin ${BRANCH_NAME}; then
                   handle_repo_error "${repo_name}" "Failed to push new branch after retries" "$TEMP_DIR"
@@ -542,6 +553,16 @@ jobs:
             update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.FEATURE_RELEASE_VERSION" "${CURRENT_VERSION}"
             update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.FEATURE_RELEASE_BRANCH" "${BRANCH_NAME}"
             commit_and_push "Bump version in ${WORKFLOW_FILE} to ${FULL_NEW_VERSION}" "${WORKFLOW_FILE}" "${SOURCE_BRANCH}"
+          else
+            echo "No ${WORKFLOW_FILE} found. No changes pushed to ${SOURCE_BRANCH}."
+          fi
+
+          # changes to .github/workflows/build-openstack-operator.yaml
+          WORKFLOW_FILE=".github/workflows/build-openstack-operator.yaml"
+          if [ -f "${WORKFLOW_FILE}" ]; then
+            FULL_NEW_VERSION="${NEW_VERSION}.0"
+            update_yaml_value "${WORKFLOW_FILE}" ".jobs.call-build-workflow.with.operator_version" "${FULL_NEW_VERSION}"
+            commit_and_push "Bump operator_version in ${WORKFLOW_FILE} to ${FULL_NEW_VERSION}" "${WORKFLOW_FILE}" "${SOURCE_BRANCH}"
           else
             echo "No ${WORKFLOW_FILE} found. No changes pushed to ${SOURCE_BRANCH}."
           fi

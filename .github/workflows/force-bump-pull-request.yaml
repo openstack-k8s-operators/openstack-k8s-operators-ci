@@ -95,3 +95,4 @@ jobs:
         commit-message: "Update openstack-k8s-operators (${{ inputs.branch_name }})"
         committer: openstack-k8s-operators-ci <openstack-k8s-operators-ci@github.com>
         author: openstack-k8s-operators-ci <openstack-k8s-operators-ci@github.com>
+        labels: ok-to-test

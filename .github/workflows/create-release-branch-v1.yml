@@ -385,6 +385,7 @@ jobs:
               handle_repo_error "${repo_name}" "Failed to create new branch '${BRANCH_NAME}'" "$TEMP_DIR"
             fi
 
+            BRANCH_PUSHED=false
             if [ -f "Makefile" ]; then
               echo "Makefile found. Checking for variables to update on new branch..."
               if grep -qE "^${BRANCH_VARIABLE}\s*(\?=|=)" Makefile; then
@@ -400,13 +401,23 @@ jobs:
                 fi
               fi
               
-              # FAIL if commit and push fails
-              if ! commit_and_push "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile" "${BRANCH_NAME}"; then
-                handle_repo_error "${repo_name}" "Failed to commit and push Makefile changes" "$TEMP_DIR"
+              # Check if there are changes to commit and push
+              if ! git diff --quiet -- Makefile; then
+                # FAIL if commit and push fails
+                if ! commit_and_push "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile" "${BRANCH_NAME}"; then
+                  handle_repo_error "${repo_name}" "Failed to commit and push Makefile changes" "$TEMP_DIR"
+                fi
+                BRANCH_PUSHED=true
+              else
+                echo "No changes detected in Makefile."
               fi
             else
-              echo "No Makefile found. Creating branch without Makefile changes."
-              # Still need to push the branch even without Makefile changes
+              echo "No Makefile found."
+            fi
+
+            # Push the branch if it wasn't already pushed via commit_and_push
+            if [ "$BRANCH_PUSHED" = "false" ]; then
+              echo "Pushing branch ${BRANCH_NAME} without Makefile changes."
               if [ "$DRY_RUN" != "true" ]; then
                 if ! retry_command 3 5 "Pushing new branch ${BRANCH_NAME}" git push origin ${BRANCH_NAME}; then
                   handle_repo_error "${repo_name}" "Failed to push new branch after retries" "$TEMP_DIR"
@@ -497,29 +508,49 @@ jobs:
             exit 1
           fi
 
+          # Create a new branch for the PR
+          PR_BRANCH="bump-version-${NEW_VERSION}-$(date +%s)"
+          echo "Creating branch ${PR_BRANCH} for pull request..."
+          if ! git checkout -b "${PR_BRANCH}"; then
+            echo "::error::Failed to create branch ${PR_BRANCH}"
+            exit 1
+          fi
+
+          # Track if any changes were made
+          CHANGES_MADE=false
+          FILES_TO_COMMIT=""
+
           # change to the Makefile
           if [ -f "Makefile" ]; then
             FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
             if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
               sed -i -E "s/^(${VERSION_VARIABLE}\s*(:=|\?=|=)).*/\1 ${FULL_MAKEFILE_VERSION}/" Makefile
-              commit_and_push "Bump Makefile version to ${FULL_MAKEFILE_VERSION}" "Makefile" "${SOURCE_BRANCH}"
+              if ! git diff --quiet -- Makefile; then
+                echo "Makefile updated to version ${FULL_MAKEFILE_VERSION}"
+                FILES_TO_COMMIT="$FILES_TO_COMMIT Makefile"
+                CHANGES_MADE=true
+              fi
             else
-              echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
+              echo "Variable '${VERSION_VARIABLE}' not found in Makefile."
             fi
           else
-            echo "No Makefile found. No changes pushed to ${SOURCE_BRANCH}."
+            echo "No Makefile found."
           fi
 
           # change to hack/fake_minor_update.sh
           if [ -f "hack/fake_minor_update.sh" ]; then
             if grep -qE "^${VERSION_VARIABLE}=" hack/fake_minor_update.sh; then
               sed -i -E "s/^(${VERSION_VARIABLE}=).*/\1${NEW_VERSION}/" hack/fake_minor_update.sh
-              commit_and_push "Bump fake_minor_update.sh version to ${NEW_VERSION}" "hack/fake_minor_update.sh" "${SOURCE_BRANCH}"
+              if ! git diff --quiet -- hack/fake_minor_update.sh; then
+                echo "hack/fake_minor_update.sh updated to version ${NEW_VERSION}"
+                FILES_TO_COMMIT="$FILES_TO_COMMIT hack/fake_minor_update.sh"
+                CHANGES_MADE=true
+              fi
             else
-              echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
+              echo "Variable '${VERSION_VARIABLE}' not found in hack/fake_minor_update.sh."
             fi
           else
-            echo "No hack/fake_minor_update.sh found. No changes pushed to ${SOURCE_BRANCH}."
+            echo "No hack/fake_minor_update.sh found."
           fi
 
           # changes to .github/workflows/catalog-openstack-operator-upgrades.yaml
@@ -541,9 +572,71 @@ jobs:
             update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.MAIN_VERSION" "${FULL_NEW_VERSION}"
             update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.FEATURE_RELEASE_VERSION" "${CURRENT_VERSION}"
             update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.FEATURE_RELEASE_BRANCH" "${BRANCH_NAME}"
-            commit_and_push "Bump version in ${WORKFLOW_FILE} to ${FULL_NEW_VERSION}" "${WORKFLOW_FILE}" "${SOURCE_BRANCH}"
+            if ! git diff --quiet -- "${WORKFLOW_FILE}"; then
+              echo "Updated ${WORKFLOW_FILE}"
+              FILES_TO_COMMIT="$FILES_TO_COMMIT ${WORKFLOW_FILE}"
+              CHANGES_MADE=true
+            fi
           else
-            echo "No ${WORKFLOW_FILE} found. No changes pushed to ${SOURCE_BRANCH}."
+            echo "No ${WORKFLOW_FILE} found."
+          fi
+
+          # changes to .github/workflows/build-openstack-operator.yaml
+          WORKFLOW_FILE=".github/workflows/build-openstack-operator.yaml"
+          if [ -f "${WORKFLOW_FILE}" ]; then
+            FULL_NEW_VERSION="${NEW_VERSION}.0"
+            update_yaml_value "${WORKFLOW_FILE}" ".jobs.call-build-workflow.with.operator_version" "${FULL_NEW_VERSION}"
+            if ! git diff --quiet -- "${WORKFLOW_FILE}"; then
+              echo "Updated ${WORKFLOW_FILE}"
+              FILES_TO_COMMIT="$FILES_TO_COMMIT ${WORKFLOW_FILE}"
+              CHANGES_MADE=true
+            fi
+          else
+            echo "No ${WORKFLOW_FILE} found."
+          fi
+
+          # If changes were made, commit and create PR
+          if [ "$CHANGES_MADE" = "true" ]; then
+            echo "Changes detected. Preparing to commit and create pull request..."
+
+            # Show the changes
+            echo "Showing all changes:"
+            git diff
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "DRY RUN: Would have committed and created PR for openstack-operator with changes to:${FILES_TO_COMMIT}"
+            else
+              # Configure git
+              git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+              git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+              # Commit all changes
+              git add ${FILES_TO_COMMIT}
+              git commit -m "Bump version to ${NEW_VERSION}.0 for ${BRANCH_NAME} release"
+              # Push the branch
+              echo "Pushing branch ${PR_BRANCH}..."
+              if ! retry_command 3 5 "Pushing branch ${PR_BRANCH}" git push origin "${PR_BRANCH}"; then
+                echo "::error::Failed to push branch ${PR_BRANCH}"
+                exit 1
+              fi
+              # Create pull request using GitHub CLI
+              echo "Creating pull request..."
+              PR_BODY="This PR updates the version to ${NEW_VERSION}.0 in preparation for the ${BRANCH_NAME} release."$'\n\n'"Changes included:"$'\n'"- Makefile version bump"$'\n'"- hack/fake_minor_update.sh version update"$'\n'"- Workflow file updates for ${BRANCH_NAME}"$'\n\n'"Generated automatically by the create-release-branch workflow."
+              PR_URL=$(gh pr create \
+                --title "Bump version to ${NEW_VERSION}.0 for ${BRANCH_NAME} release" \
+                --body "${PR_BODY}" \
+                --base main \
+                --head "${PR_BRANCH}" \
+                --repo "${ORG_NAME}/openstack-operator")
+
+              if [ $? -ne 0 ]; then
+                echo "::error::Failed to create pull request"
+                exit 1
+              fi
+
+              echo "✅ Pull request created successfully: ${PR_URL}"
+            fi
+          else
+            echo "No changes detected in openstack-operator. Skipping pull request creation."
           fi
 
           cd .. && rm -rf "$TEMP_DIR"

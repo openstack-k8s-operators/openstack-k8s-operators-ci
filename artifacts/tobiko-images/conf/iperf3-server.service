@@ -1,0 +1,11 @@
+[Unit]
+Description=iperf3 server on port 5201
+After=syslog.target network.target
+
+[Service]
+ExecStart=/usr/bin/iperf3 -s -p 5201
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target

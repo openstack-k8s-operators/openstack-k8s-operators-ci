@@ -1,0 +1,120 @@
+name: Build Customized Advanced Image for Tobiko
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      fedora_version:
+        description: 'Fedora version (e.g., 42-1.1)'
+        required: true
+        default: '42-1.1'
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+      customize_args:
+        description: 'Space-separated arguments for virt-customize'
+        required: true
+        default: >-
+          --copy-in /tmp/config:/etc/selinux
+          --firstboot-command
+          'nmcli connection add type vlan con-name vlan101 ifname vlan101 vlan.parent ens3 vlan.id 101 ipv6.addr-gen-mode default-or-eui64;
+          nmcli connection add type vlan con-name vlan101 ifname vlan101 vlan.parent eth0 vlan.id 101 ipv6.addr-gen-mode default-or-eui64;
+          nmcli connection add type vlan con-name vlan101 ifname vlan101 vlan.parent enp3s0 vlan.id 101 ipv6.addr-gen-mode default-or-eui64'
+          --install iperf3,iputils,nmap,nmap-ncat,nginx
+          --copy-in /tmp/nginx_id.conf:/etc/nginx/conf.d
+          --run-command 'systemctl enable nginx'
+          --copy-in /tmp/iperf3-server.service:/etc/systemd/system
+          --run-command 'systemctl enable iperf3-server'
+          --root-password password:tobiko
+          --selinux-relabel
+
+jobs:
+  build-image:
+    # TODO(eduolivares): the virt-customize command fails with ubuntu-24.04/ubuntu-latest
+    runs-on: ubuntu-22.04
+
+    # Permission needed to create a release and upload assets
+    permissions:
+      contents: write
+
+    env:
+      # Set image file names based on inputs
+      IMAGE_FILE_BASE: Fedora-Cloud-Base-Generic-${{ inputs.fedora_version }}.x86_64
+
+      # Define our custom output image name
+      CUSTOM_IMAGE_FILE: tobiko-custom-${{ inputs.release_tag }}.qcow2
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Prepare Config Files
+        run: |
+          # Copy config files from the repository to /tmp for virt-customize
+          cp artifacts/tobiko-images/conf/selinux-config /tmp/config
+          cp artifacts/tobiko-images/conf/nginx_id.conf /tmp/nginx_id.conf
+          cp artifacts/tobiko-images/conf/iperf3-server.service /tmp/iperf3-server.service
+          echo "Config files copied to /tmp"
+
+      - name: 3. Extract Fedora Major Version and Construct URL
+        id: setup
+        run: |
+          # Extract major version from fedora_version (e.g., "42" from "42-1.1")
+          MAJOR_VERSION=$(echo "${{ inputs.fedora_version }}" | cut -d'-' -f1)
+          echo "major_version=$MAJOR_VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted major version: $MAJOR_VERSION"
+
+          # Construct the download URL
+          IMAGE_URL="https://download.fedoraproject.org/pub/fedora/linux/releases/${MAJOR_VERSION}/Cloud/x86_64/images/${{ env.IMAGE_FILE_BASE }}.qcow2"
+          echo "image_url=$IMAGE_URL" >> $GITHUB_OUTPUT
+          echo "Download URL: $IMAGE_URL"
+
+      - name: 4. Install Dependencies
+        run: |
+          echo "Installing libguestfs-tools (for virt-customize) and wget"
+          sudo apt-get update
+          sudo apt-get install -y libguestfs-tools wget
+
+      - name: 5. Download Base Fedora Image
+        run: |
+          echo "Downloading from ${{ steps.setup.outputs.image_url }}"
+          wget -O ${{ env.IMAGE_FILE_BASE }}.qcow2 ${{ steps.setup.outputs.image_url }}
+
+      - name: 6. Rename and Customize Image
+        run: |
+          # Copy the downloaded image to /tmp and give it our custom name
+          sudo cp ${{ env.IMAGE_FILE_BASE }}.qcow2 /tmp/${{ env.CUSTOM_IMAGE_FILE }}
+
+          echo "Running virt-customize with args: ${{ inputs.customize_args }}"
+
+          # virt-customize modifies the image file in-place
+          # The shell will correctly parse the space-separated arguments from the input
+          sudo LIBGUESTFS_BACKEND=direct virt-customize -a /tmp/${{ env.CUSTOM_IMAGE_FILE }} ${{ inputs.customize_args }}
+
+          # Move the customized image back to the working directory
+          sudo mv /tmp/${{ env.CUSTOM_IMAGE_FILE }} ${{ env.CUSTOM_IMAGE_FILE }}
+
+          # Change ownership back to the runner user so the file can be read
+          echo "Resetting file ownership..."
+          sudo chown $(whoami):$(whoami) ${{ env.CUSTOM_IMAGE_FILE }}
+
+      - name: 7. Create GitHub Release and Upload Artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          # This is the tag you provided as input
+          tag_name: ${{ inputs.release_tag }}
+
+          # Title for the release
+          name: "Custom Tobiko ${{ inputs.release_tag }} Image"
+
+          # Release description
+          body: |
+            Customized Tobiko ${{ inputs.release_tag }} image built by GitHub Actions.
+
+            **Customizations:**
+            ```
+            ${{ inputs.customize_args }}
+            ```
+
+          # The file(s) to upload
+          files: ${{ env.CUSTOM_IMAGE_FILE }}

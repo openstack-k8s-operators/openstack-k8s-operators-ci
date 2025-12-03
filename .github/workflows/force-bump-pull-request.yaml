@@ -50,8 +50,11 @@ jobs:
         GOTOOLCHAIN: local
       run: |
         cd $GITHUB_WORKSPACE
+        go work init
+        make gowork
         BRANCH='${{ inputs.branch_name }}' make force-bump
         make tidy
+        go work sync
         make manifests generate
 
     - name: run make bindata

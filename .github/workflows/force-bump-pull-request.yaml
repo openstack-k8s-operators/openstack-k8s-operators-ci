@@ -53,8 +53,8 @@ jobs:
         go work init
         make gowork
         BRANCH='${{ inputs.branch_name }}' make force-bump
-        make tidy
         go work sync
+        make tidy
         make manifests generate
 
     - name: run make bindata

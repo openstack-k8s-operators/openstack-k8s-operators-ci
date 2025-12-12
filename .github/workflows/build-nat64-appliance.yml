@@ -1,0 +1,237 @@
+name: Build NAT64 Appliance Image
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+      ci_framework_repo:
+        description: 'ci-framework repository in owner/repo format (for testing forks)'
+        required: false
+        default: 'openstack-k8s-operators/ci-framework'
+      ci_framework_ref:
+        description: 'ci-framework branch/tag/PR (e.g., main, my-branch, refs/pull/123/head)'
+        required: false
+        default: 'main'
+
+  # Run weekly on Mondays at 00:00 UTC
+  schedule:
+    - cron: '0 0 * * 1'
+
+jobs:
+  build-image:
+    runs-on: ubuntu-22.04
+
+    # Permission needed to create a release and upload assets
+    permissions:
+      contents: write
+
+    env:
+      WORK_DIR: ${{ github.workspace }}/ci-framework-data
+
+    steps:
+      - name: 1. Install System Dependencies
+        run: |
+          echo "Installing system dependencies for diskimage-builder..."
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip \
+            python3-venv \
+            qemu-utils \
+            dosfstools \
+            xfsprogs \
+            kpartx \
+            debootstrap \
+            gdisk \
+            git
+          echo "System dependencies installed"
+
+      - name: 2. Clone ci-framework Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.ci_framework_repo || 'openstack-k8s-operators/ci-framework' }}
+          ref: ${{ inputs.ci_framework_ref || 'main' }}
+          path: ci-framework
+          fetch-depth: 1
+
+      - name: 3. Setup Python Virtual Environment
+        run: |
+          echo "Creating Python virtual environment at ~/nat64_venv..."
+          python3 -m venv ~/nat64_venv
+          source ~/nat64_venv/bin/activate
+
+          pip install --upgrade pip setuptools wheel
+
+          echo "Installing Ansible and diskimage-builder..."
+          pip install ansible-core
+          pip install diskimage-builder
+
+          echo "Environment setup complete"
+
+      - name: 4. Create Ansible Playbook for Building NAT64 Image
+        run: |
+          cat > ${{ github.workspace }}/build-nat64.yml << 'EOF'
+          ---
+          - name: Build nat64-appliance image
+            hosts: localhost
+            connection: local
+            gather_facts: true
+            vars:
+              cifmw_basedir: "${{ env.WORK_DIR }}"
+              cifmw_nat64_appliance_run_dib_as_root: false
+              cifmw_nat64_appliance_use_ci_script: false
+              cifmw_nat64_appliance_venv_dir: "{{ ansible_env.HOME }}/nat64_venv"
+            roles:
+              - nat64_appliance
+          EOF
+
+          echo "Ansible playbook created"
+          cat ${{ github.workspace }}/build-nat64.yml
+
+      - name: 5. Run Ansible Playbook to Build Image
+        run: |
+          echo "Building NAT64 appliance image using Ansible..."
+          echo "Using ci-framework role defaults for DIB configuration"
+
+          cd ${{ github.workspace }}/ci-framework
+
+          # Activate the venv and run the playbook
+          source ~/nat64_venv/bin/activate
+
+          # Skip 'packages' tag since we already installed dependencies
+          # Use our venv at ~/nat64_venv instead of letting role create one
+          ANSIBLE_ROLES_PATH=${{ github.workspace }}/ci-framework/roles \
+            ansible-playbook -v \
+              --skip-tags packages \
+              ${{ github.workspace }}/build-nat64.yml
+
+          echo "Image build completed successfully"
+
+      - name: 6. Verify Built Image
+        run: |
+          IMAGE_PATH="${{ env.WORK_DIR }}/nat64_appliance/nat64-appliance.qcow2"
+
+          if [ -f "$IMAGE_PATH" ]; then
+            echo "Built image details:"
+            ls -lh "$IMAGE_PATH"
+            qemu-img info "$IMAGE_PATH"
+          else
+            echo "ERROR: Image file not found at $IMAGE_PATH"
+            echo "Checking work directory contents:"
+            ls -laR "${{ env.WORK_DIR }}"
+            exit 1
+          fi
+
+      - name: 7. Create Unique Release Tag and Rename Image
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Manual run: use provided tag
+            RELEASE_TAG="${{ inputs.release_tag }}"
+          else
+            # Scheduled run: generate timestamp-based tag
+            RELEASE_TAG="build-$(date +%Y%m%d-%H%M%S)"
+          fi
+
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "Release tag: $RELEASE_TAG"
+
+          # Rename image to include the release tag
+          TAGGED_IMAGE="nat64-appliance-${RELEASE_TAG}.qcow2"
+          mv ${{ env.WORK_DIR }}/nat64_appliance/nat64-appliance.qcow2 \
+             ${{ github.workspace }}/${TAGGED_IMAGE}
+
+          echo "tagged_image=$TAGGED_IMAGE" >> $GITHUB_OUTPUT
+          echo "Image renamed to: $TAGGED_IMAGE"
+          ls -lh ${{ github.workspace }}/${TAGGED_IMAGE}
+
+      - name: 8. Create Versioned GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.release_tag }}
+          name: "NAT64 Appliance ${{ steps.release_tag.outputs.release_tag }}"
+          body: |
+            NAT64 Appliance image built by GitHub Actions.
+
+            ## Build Configuration
+
+            - **ci-framework repository**: `${{ inputs.ci_framework_repo || 'openstack-k8s-operators/ci-framework' }}`
+            - **ci-framework reference**: `${{ inputs.ci_framework_ref || 'main' }}`
+            - **Build type**: ${{ github.event_name == 'schedule' && 'Scheduled (weekly)' || 'Manual dispatch' }}
+
+            DIB configuration uses defaults from the ci-framework nat64_appliance role.
+
+            ## Usage
+
+            For usage instructions and deployment examples, see the
+            [nat64_appliance README](https://github.com/openstack-k8s-operators/ci-framework/blob/main/roles/nat64_appliance/README.md).
+          files: ${{ steps.release_tag.outputs.tagged_image }}
+
+      - name: 9. Update 'latest' Release Tag
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "NAT64 Appliance (Latest)"
+          prerelease: true
+          body: |
+            This is the latest NAT64 Appliance build. This release is automatically updated.
+
+            **Latest Build**: ${{ steps.release_tag.outputs.release_tag }}
+
+            ## Download
+
+            Use the static URL for the latest build:
+            ```bash
+            curl -L -O https://github.com/openstack-k8s-operators/openstack-k8s-operators-ci/releases/download/latest/nat64-appliance-latest.qcow2
+            ```
+
+            Or download a specific version from the [releases page](https://github.com/openstack-k8s-operators/openstack-k8s-operators-ci/releases) 
+            to pin your CI to a known-good build.
+
+            ## Usage
+
+            For usage instructions and deployment examples, see the
+            [nat64_appliance README](https://github.com/openstack-k8s-operators/ci-framework/blob/main/roles/nat64_appliance/README.md).
+          files: ${{ steps.release_tag.outputs.tagged_image }}
+
+      - name: 10. Upload Image with Static Filename to Latest Release
+        run: |
+          echo "Creating static filename copy for easy downloading..."
+
+          # Copy the image with a static name
+          cp ${{ github.workspace }}/${{ steps.release_tag.outputs.tagged_image }} \
+             ${{ github.workspace }}/nat64-appliance-latest.qcow2
+
+          echo "Uploading to latest release with static filename..."
+          # Upload to latest release, replacing any existing file with the same name
+          gh release upload latest nat64-appliance-latest.qcow2 --clobber --repo ${{ github.repository }}
+
+          echo "Static URL available at:"
+          echo "https://github.com/${{ github.repository }}/releases/download/latest/nat64-appliance-latest.qcow2"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 11. Cleanup Old Releases (Keep Last 4)
+        if: github.event_name == 'schedule'
+        run: |
+          echo "Cleaning up old scheduled builds, keeping last 4..."
+
+          # Get all releases with 'build-' prefix, sort by creation date (newest first)
+          # Skip the first 4 (keep them), delete the rest
+          OLD_RELEASES=$(gh release list --limit 100 --json tagName,createdAt --repo ${{ github.repository }} \
+            | jq -r '.[] | select(.tagName | startswith("build-")) | .tagName' \
+            | sort -r \
+            | tail -n +5)
+
+          if [ -n "$OLD_RELEASES" ]; then
+            echo "Deleting old releases:"
+            echo "$OLD_RELEASES"
+            echo "$OLD_RELEASES" | xargs -I {} gh release delete {} --yes --cleanup-tag --repo ${{ github.repository }}
+            echo "Cleanup complete"
+          else
+            echo "No old releases to delete (fewer than 5 total)"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

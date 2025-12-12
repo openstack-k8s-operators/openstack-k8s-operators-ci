@@ -74,7 +74,8 @@ jobs:
     - name: Set latest tag for non main branch
       if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
       run: |
-        echo "latesttag=${${{ steps.branch-name.outputs.current_branch }}-latest"@L} >> $GITHUB_ENV
+        latesttag=${{ steps.branch-name.outputs.current_branch }}-latest
+        echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Buildah Action
       id: build-operator
@@ -167,7 +168,8 @@ jobs:
     - name: Set latest tag for non main branch
       if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
       run: |
-        echo "latesttag=${{ steps.branch-name.outputs.current_branch }}-latest" >> $GITHUB_ENV
+        latesttag=${{ steps.branch-name.outputs.current_branch }}-latest
+        echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Build operator-bundle using buildah
       id: build-operator-bundle
@@ -229,7 +231,8 @@ jobs:
     - name: Set latest tag for non main branch
       if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
       run: |
-        echo "latesttag=${{ steps.branch-name.outputs.current_branch }}-latest" >> $GITHUB_ENV
+        latesttag=${{ steps.branch-name.outputs.current_branch }}-latest
+        echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Install opm
       uses: redhat-actions/openshift-tools-installer@v1

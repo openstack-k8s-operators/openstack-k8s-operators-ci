@@ -74,7 +74,7 @@ jobs:
     - name: Set latest tag for non main branch
       if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
       run: |
-        echo "latesttag=${{ steps.branch-name.outputs.current_branch }}-latest" >> $GITHUB_ENV
+        echo "latesttag=${${{ steps.branch-name.outputs.current_branch }}-latest"@L} >> $GITHUB_ENV
 
     - name: Buildah Action
       id: build-operator

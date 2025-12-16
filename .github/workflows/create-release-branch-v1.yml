@@ -415,6 +415,38 @@ jobs:
               echo "No Makefile found."
             fi
 
+            # Special handling for openstack-operator: update default_images.yaml
+            if [[ "$repo_name" == "openstack-operator" ]]; then
+              DEFAULT_IMAGES_FILE="config/operator/default_images.yaml"
+              if [ -f "${DEFAULT_IMAGES_FILE}" ]; then
+                echo "Updating ${DEFAULT_IMAGES_FILE} for release branch ${BRANCH_NAME}..."
+                # Update specific images to use the release branch tag
+                if ! sed -i -E "s|(quay\.io/openstack-k8s-operators/openstack-ansibleee-runner):latest|\1:${BRANCH_NAME}-latest|g" "${DEFAULT_IMAGES_FILE}"; then
+                  handle_repo_error "${repo_name}" "Failed to update openstack-ansibleee-runner in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
+                fi
+                if ! sed -i -E "s|(quay\.io/openstack-k8s-operators/openstack-baremetal-operator-agent):latest|\1:${BRANCH_NAME}-latest|g" "${DEFAULT_IMAGES_FILE}"; then
+                  handle_repo_error "${repo_name}" "Failed to update openstack-baremetal-operator-agent in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
+                fi
+                if ! sed -i -E "s|(quay\.io/openstack-k8s-operators/openstack-must-gather):latest|\1:${BRANCH_NAME}-latest|g" "${DEFAULT_IMAGES_FILE}"; then
+                  handle_repo_error "${repo_name}" "Failed to update openstack-must-gather in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
+                fi
+
+                # Check if there are changes to commit and push
+                if ! git diff --quiet -- "${DEFAULT_IMAGES_FILE}"; then
+                  echo "Changes detected in ${DEFAULT_IMAGES_FILE}"
+                  # FAIL if commit and push fails
+                  if ! commit_and_push "[${BRANCH_NAME}] Update default images for ${BRANCH_NAME}" "${DEFAULT_IMAGES_FILE}" "${BRANCH_NAME}"; then
+                    handle_repo_error "${repo_name}" "Failed to commit and push ${DEFAULT_IMAGES_FILE} changes" "$TEMP_DIR"
+                  fi
+                  BRANCH_PUSHED=true
+                else
+                  echo "No changes detected in ${DEFAULT_IMAGES_FILE}."
+                fi
+              else
+                echo "No ${DEFAULT_IMAGES_FILE} found in ${repo_name}."
+              fi
+            fi
+
             # Push the branch if it wasn't already pushed via commit_and_push
             if [ "$BRANCH_PUSHED" = "false" ]; then
               echo "Pushing branch ${BRANCH_NAME} without Makefile changes."

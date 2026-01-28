@@ -1,0 +1,37 @@
+# List of repositories to create feature branches in
+# One repository name per line
+# Lines starting with # are comments and will be ignored
+# Empty lines are also ignored
+architecture
+barbican-operator
+ci-framework
+cinder-operator
+data-plane-adoption
+designate-operator
+edpm-ansible
+glance-operator
+heat-operator
+horizon-operator
+infra-operator
+install_yamls
+ironic-operator
+keystone-operator
+lib-common
+manila-operator
+mariadb-operator
+mysqld_exporter
+neutron-operator
+nova-operator
+octavia-operator
+openstack-baremetal-operator
+openstack-must-gather
+openstack-network-exporter
+openstack-operator
+ovn-operator
+placement-operator
+prometheus-podman-exporter
+sg-core
+swift-operator
+telemetry-operator
+test-operator
+watcher-operator

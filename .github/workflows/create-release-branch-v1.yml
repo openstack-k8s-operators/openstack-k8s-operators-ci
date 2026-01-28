@@ -704,11 +704,10 @@ jobs:
             exit 1
           fi
 
-          update_yaml_value ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
           update_yaml_value ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
 
           # Commit and push changes if any were made
-          commit_and_push "ci: Update workflow defaults for ${BRANCH_NAME}" ".github/workflows/" "${SOURCE_BRANCH}"
+          commit_and_push "ci: Update force-bump-branches for ${BRANCH_NAME}" ".github/workflows/force-bump-branches.yaml" "${SOURCE_BRANCH}"
 
           cd .. && rm -rf "$TEMP_DIR"
           echo "Workflow finished."

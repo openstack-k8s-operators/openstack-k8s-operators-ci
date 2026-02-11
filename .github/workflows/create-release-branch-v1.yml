@@ -61,7 +61,7 @@ jobs:
       # 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
       OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
       # 'The relative path to the file containing the list of repositories to process.'
-      REPO_LIST_FILE: 'feature_branch_repos.txt'
+      REPO_LIST_FILE: 'feature_branch_repos.yaml'
       # 'The branch to create the new branch from.'
       SOURCE_BRANCH: 'main'
       # 'Timeout for git operations (in seconds)'
@@ -315,8 +315,8 @@ jobs:
             exit 1
           fi
 
-          # Read repositories from file, filtering out empty lines and comments
-          repos=$(grep -v '^#' "${REPO_LIST_FILE}" | grep -v '^[[:space:]]*$' | tr '\n' ' ')
+          # Read repositories from YAML file
+          repos=$(yq e '.repos[].name' "${REPO_LIST_FILE}" | tr '\n' ' ')
 
           if [ -z "$repos" ]; then
             echo "No repositories found in '${REPO_LIST_FILE}'."
@@ -381,8 +381,11 @@ jobs:
               handle_repo_error "${repo_name}" "Failed to create new branch '${BRANCH_NAME}'" "$TEMP_DIR"
             fi
 
+            # Check if we should skip BRANCH variable changes for this repo
+            skip_makefile_changes=$(yq e ".repos[] | select(.name == \"${repo_name}\") | .skip_makefile_changes // false" "${REPO_LIST_FILE}")
+
             BRANCH_PUSHED=false
-            if [ -f "Makefile" ]; then
+            if [ -f "Makefile" ] && [ "$skip_makefile_changes" != "true" ]; then
               echo "Makefile found. Checking for variables to update on new branch..."
               if grep -qE "^${BRANCH_VARIABLE}\s*(\?=|=)" Makefile; then
                 if ! sed -i -E "s/^(${BRANCH_VARIABLE}\s*(\?=|=)\s*).*/\1${BRANCH_NAME}/" Makefile; then
@@ -396,7 +399,7 @@ jobs:
                   fi
                 fi
               fi
-              
+
               # Check if there are changes to commit and push
               if ! git diff --quiet -- Makefile; then
                 # FAIL if commit and push fails
@@ -408,7 +411,11 @@ jobs:
                 echo "No changes detected in Makefile."
               fi
             else
-              echo "No Makefile found."
+              if [ "$skip_makefile_changes" = "true" ]; then
+                echo "Skipping Makefile changes for ${repo_name} (configured in ${REPO_LIST_FILE})."
+              else
+                echo "No Makefile found."
+              fi
             fi
 
             # Special handling for openstack-operator: update default_images.yaml

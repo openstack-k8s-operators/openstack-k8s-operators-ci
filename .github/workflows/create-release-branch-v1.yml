@@ -142,6 +142,31 @@ jobs:
           cat <<'EOF' > workflow_functions.sh
           #!/bin/bash
 
+          # A function to handle committing changes (without pushing).
+          # Arguments: 1: Commit Message, 2: File(s) to add
+          # Returns: 0 on success, 1 on failure
+          commit() {
+            local commit_message="$1"
+            local files_to_add="$2"
+
+            if ! git diff --quiet -- $files_to_add; then
+              echo "Showing changes:"
+              git diff -- $files_to_add
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Commit '${commit_message}' not created."
+                return 0
+              else
+                git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]' || return 1
+                git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com' || return 1
+                git add $files_to_add || return 1
+                git commit -m "$commit_message" || return 1
+              fi
+            else
+              echo "No changes detected in '${files_to_add}'. Nothing to commit."
+            fi
+            return 0
+          }
+
           # A function to handle committing and pushing changes.
           # Arguments: 1: Commit Message, 2: File(s) to add, 3: Branch to push
           # Returns: 0 on success, 1 on failure
@@ -150,22 +175,17 @@ jobs:
             local files_to_add="$2"
             local branch_to_push="$3"
 
-            if ! git diff --quiet -- $files_to_add; then
-              echo "Showing changes for branch '${branch_to_push}':"
-              git diff -- $files_to_add
-              if [ "$DRY_RUN" = "true" ]; then
-                echo "DRY RUN: Commit '${commit_message}' not created for branch '${branch_to_push}'."
-                return 0
-              else
-                git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]' || return 1
-                git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com' || return 1
-                git add $files_to_add || return 1
-                git commit -m "$commit_message" || return 1
+            # Use commit function to create the commit
+            if ! commit "$commit_message" "$files_to_add"; then
+              return 1
+            fi
+
+            # Push if there were changes and not in dry run mode
+            if ! git diff --quiet HEAD~1 -- $files_to_add 2>/dev/null || ! git diff --quiet -- $files_to_add; then
+              if [ "$DRY_RUN" != "true" ]; then
                 echo "Pushing changes to ${branch_to_push}..."
                 retry_command 3 5 "Pushing to ${branch_to_push}" git push origin ${branch_to_push} || return 1
               fi
-            else
-              echo "No changes detected in '${files_to_add}'. Nothing to commit."
             fi
             return 0
           }
@@ -389,6 +409,8 @@ jobs:
             skip_makefile_changes=$(yq e ".repos[] | select(.name == \"${repo_name}\") | .skip_makefile_changes // false" "${REPO_LIST_FILE}")
 
             BRANCH_PUSHED=false
+
+            # Update Makefile if needed
             if [ -f "Makefile" ] && [ "$skip_makefile_changes" != "true" ]; then
               echo "Makefile found. Checking for variables to update on new branch..."
               if grep -qE "^${BRANCH_VARIABLE}\s*(\?=|=)" Makefile; then
@@ -404,13 +426,11 @@ jobs:
                 fi
               fi
 
-              # Check if there are changes to commit and push
+              # Commit Makefile changes if any
               if ! git diff --quiet -- Makefile; then
-                # FAIL if commit and push fails
-                if ! commit_and_push "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile" "${BRANCH_NAME}"; then
-                  handle_repo_error "${repo_name}" "Failed to commit and push Makefile changes" "$TEMP_DIR"
+                if ! commit "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile"; then
+                  handle_repo_error "${repo_name}" "Failed to commit Makefile changes" "$TEMP_DIR"
                 fi
-                BRANCH_PUSHED=true
               else
                 echo "No changes detected in Makefile."
               fi
@@ -438,14 +458,12 @@ jobs:
                   handle_repo_error "${repo_name}" "Failed to update openstack-must-gather in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
                 fi
 
-                # Check if there are changes to commit and push
+                # Commit default_images.yaml changes if any
                 if ! git diff --quiet -- "${DEFAULT_IMAGES_FILE}"; then
                   echo "Changes detected in ${DEFAULT_IMAGES_FILE}"
-                  # FAIL if commit and push fails
-                  if ! commit_and_push "[${BRANCH_NAME}] Update default images for ${BRANCH_NAME}" "${DEFAULT_IMAGES_FILE}" "${BRANCH_NAME}"; then
-                    handle_repo_error "${repo_name}" "Failed to commit and push ${DEFAULT_IMAGES_FILE} changes" "$TEMP_DIR"
+                  if ! commit "[${BRANCH_NAME}] Update default images for ${BRANCH_NAME}" "${DEFAULT_IMAGES_FILE}"; then
+                    handle_repo_error "${repo_name}" "Failed to commit ${DEFAULT_IMAGES_FILE} changes" "$TEMP_DIR"
                   fi
-                  BRANCH_PUSHED=true
                 else
                   echo "No changes detected in ${DEFAULT_IMAGES_FILE}."
                 fi
@@ -454,14 +472,15 @@ jobs:
               fi
             fi
 
-            # Push the branch if it wasn't already pushed via commit_and_push
-            if [ "$BRANCH_PUSHED" = "false" ]; then
-              echo "Pushing branch ${BRANCH_NAME} without Makefile changes."
-              if [ "$DRY_RUN" != "true" ]; then
-                if ! retry_command 3 5 "Pushing new branch ${BRANCH_NAME}" git push origin ${BRANCH_NAME}; then
-                  handle_repo_error "${repo_name}" "Failed to push new branch after retries" "$TEMP_DIR"
-                fi
+            # Push the branch (with commits if any were made, or as empty branch)
+            if [ "$DRY_RUN" != "true" ]; then
+              echo "Pushing branch ${BRANCH_NAME}..."
+              if ! retry_command 3 5 "Pushing to ${BRANCH_NAME}" git push origin ${BRANCH_NAME}; then
+                handle_repo_error "${repo_name}" "Failed to push branch ${BRANCH_NAME}" "$TEMP_DIR"
               fi
+              BRANCH_PUSHED=true
+            else
+              echo "DRY RUN: Would push branch ${BRANCH_NAME}"
             fi
 
             # Track successful repository

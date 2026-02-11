@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         # maintain this list here so we can manage it in one location for all repos
-        branch: [main, 18.0-fr4]
+        branch: [main, 18.0-fr5]
     with:
       operator_name: ${{ inputs.operator_name }}
       branch_name: ${{ matrix.branch }}

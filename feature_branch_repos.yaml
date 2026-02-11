@@ -1,0 +1,45 @@
+# Configuration for repositories to create feature branches in
+# Each repository can have the following options:
+#   - name: (required) The repository name
+#   - skip_makefile_changes: (optional) If true, skip updating BRANCH variable in Makefile
+#
+# Example:
+#   - name: my-repo
+#     skip_makefile_changes: true
+
+repos:
+  - name: architecture
+  - name: barbican-operator
+  - name: ci-framework
+  - name: cinder-operator
+  - name: data-plane-adoption
+  - name: designate-operator
+  - name: edpm-ansible
+  - name: glance-operator
+  - name: heat-operator
+  - name: horizon-operator
+  - name: infra-operator
+  - name: install_yamls
+  - name: ironic-operator
+  - name: keystone-operator
+  - name: lib-common
+  - name: manila-operator
+  - name: mariadb-operator
+  - name: mysqld_exporter
+  - name: neutron-operator
+  - name: nova-operator
+  - name: octavia-operator
+  - name: openstack-baremetal-operator
+  - name: openstack-must-gather
+  - name: openstack-network-exporter
+  - name: openstack-operator
+  - name: ovn-operator
+  - name: placement-operator
+  - name: prometheus-podman-exporter
+    skip_makefile_changes: true
+  - name: sg-core
+    skip_makefile_changes: true
+  - name: swift-operator
+  - name: telemetry-operator
+  - name: test-operator
+  - name: watcher-operator

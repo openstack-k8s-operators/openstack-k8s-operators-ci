@@ -61,7 +61,7 @@ jobs:
       # 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
       OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
       # 'The relative path to the file containing the list of repositories to process.'
-      REPO_LIST_FILE: 'feature_branch_repos.txt'
+      REPO_LIST_FILE: 'feature_branch_repos.yaml'
       # 'The branch to create the new branch from.'
       SOURCE_BRANCH: 'main'
       # 'Timeout for git operations (in seconds)'
@@ -315,8 +315,8 @@ jobs:
             exit 1
           fi
 
-          # Read repositories from file, filtering out empty lines and comments
-          repos=$(grep -v '^#' "${REPO_LIST_FILE}" | grep -v '^[[:space:]]*$' | tr '\n' ' ')
+          # Read repositories from YAML file
+          repos=$(yq e '.repos[].name' "${REPO_LIST_FILE}" | tr '\n' ' ')
 
           if [ -z "$repos" ]; then
             echo "No repositories found in '${REPO_LIST_FILE}'."
@@ -381,8 +381,11 @@ jobs:
               handle_repo_error "${repo_name}" "Failed to create new branch '${BRANCH_NAME}'" "$TEMP_DIR"
             fi
 
+            # Check if we should skip BRANCH variable changes for this repo
+            skip_makefile_changes=$(yq e ".repos[] | select(.name == \"${repo_name}\") | .skip_makefile_changes // false" "${REPO_LIST_FILE}")
+
             BRANCH_PUSHED=false
-            if [ -f "Makefile" ]; then
+            if [ -f "Makefile" ] && [ "$skip_makefile_changes" != "true" ]; then
               echo "Makefile found. Checking for variables to update on new branch..."
               if grep -qE "^${BRANCH_VARIABLE}\s*(\?=|=)" Makefile; then
                 if ! sed -i -E "s/^(${BRANCH_VARIABLE}\s*(\?=|=)\s*).*/\1${BRANCH_NAME}/" Makefile; then
@@ -396,7 +399,7 @@ jobs:
                   fi
                 fi
               fi
-              
+
               # Check if there are changes to commit and push
               if ! git diff --quiet -- Makefile; then
                 # FAIL if commit and push fails
@@ -408,7 +411,11 @@ jobs:
                 echo "No changes detected in Makefile."
               fi
             else
-              echo "No Makefile found."
+              if [ "$skip_makefile_changes" = "true" ]; then
+                echo "Skipping Makefile changes for ${repo_name} (configured in ${REPO_LIST_FILE})."
+              else
+                echo "No Makefile found."
+              fi
             fi
 
             # Special handling for openstack-operator: update default_images.yaml
@@ -698,19 +705,85 @@ jobs:
             echo "::error::Failed to checkout main branch in openstack-k8s-operators-ci"
             exit 1
           fi
-          
+
           if ! git pull origin main; then
             echo "::error::Failed to pull latest changes from main branch in openstack-k8s-operators-ci"
             exit 1
           fi
 
-          update_yaml_value ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
+          # Create a new branch for the PR
+          PR_BRANCH="update-force-bump-branches-${BRANCH_NAME}-$(date +%s)"
+          echo "Creating branch ${PR_BRANCH} for pull request..."
+          if ! git checkout -b "${PR_BRANCH}"; then
+            echo "::error::Failed to create branch ${PR_BRANCH}"
+            exit 1
+          fi
 
-          # Commit and push changes if any were made
-          commit_and_push "ci: Update force-bump-branches for ${BRANCH_NAME}" ".github/workflows/force-bump-branches.yaml" "${SOURCE_BRANCH}"
+          # Track if any changes were made
+          CHANGES_MADE=false
+          FILES_TO_COMMIT=""
+
+          # Update force-bump-branches.yaml
+          WORKFLOW_FILE=".github/workflows/force-bump-branches.yaml"
+          if [ -f "${WORKFLOW_FILE}" ]; then
+            update_yaml_value "${WORKFLOW_FILE}" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
+            if ! git diff --quiet -- "${WORKFLOW_FILE}"; then
+              echo "Updated ${WORKFLOW_FILE}"
+              FILES_TO_COMMIT="${WORKFLOW_FILE}"
+              CHANGES_MADE=true
+            fi
+          else
+            echo "No ${WORKFLOW_FILE} found."
+          fi
+
+          # If changes were made, commit and create PR
+          if [ "$CHANGES_MADE" = "true" ]; then
+            echo "Changes detected. Preparing to commit and create pull request..."
+
+            # Show the changes
+            echo "Showing all changes:"
+            git diff
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "DRY RUN: Would have committed and created PR for openstack-k8s-operators-ci with changes to: ${FILES_TO_COMMIT}"
+            else
+              # Configure git
+              git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+              git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+              # Commit all changes
+              git add ${FILES_TO_COMMIT}
+              git commit -m "ci: Update force-bump-branches for ${BRANCH_NAME}"
+
+              # Push the branch
+              echo "Pushing branch ${PR_BRANCH}..."
+              if ! retry_command 3 5 "Pushing branch ${PR_BRANCH}" git push origin "${PR_BRANCH}"; then
+                echo "::error::Failed to push branch ${PR_BRANCH}"
+                exit 1
+              fi
+
+              # Create pull request using GitHub CLI
+              echo "Creating pull request..."
+              PR_BODY="This PR updates the force-bump-branches workflow to include the ${BRANCH_NAME} branch."$'\n\n'"Changes included:"$'\n'"- Update force-bump-branches.yaml matrix to: ${FORCE_BUMP_BRANCHES}"$'\n\n'"Generated automatically by the create-release-branch workflow."
+              PR_URL=$(gh pr create \
+                --title "ci: Update force-bump-branches for ${BRANCH_NAME}" \
+                --body "${PR_BODY}" \
+                --base main \
+                --head "${PR_BRANCH}" \
+                --repo "${ORG_NAME}/openstack-k8s-operators-ci")
+
+              if [ $? -ne 0 ]; then
+                echo "::error::Failed to create pull request"
+                exit 1
+              fi
+
+              echo "✅ Pull request created successfully: ${PR_URL}"
+            fi
+          else
+            echo "No changes detected in openstack-k8s-operators-ci. Skipping pull request creation."
+          fi
 
           cd .. && rm -rf "$TEMP_DIR"
-          echo "Workflow finished."
 
   retag-and-push-rabbitmq-cluster-operator-index:
     # Only run if not a dry run, parameter is enabled, and create-branches job succeeded

@@ -315,6 +315,10 @@ jobs:
             exit 1
           fi
 
+          # Convert to absolute path since we'll be changing directories
+          REPO_LIST_FILE="$(realpath "${REPO_LIST_FILE}")"
+          echo "Using repository list file: ${REPO_LIST_FILE}"
+
           # Read repositories from YAML file
           repos=$(yq e '.repos[].name' "${REPO_LIST_FILE}" | tr '\n' ' ')
 

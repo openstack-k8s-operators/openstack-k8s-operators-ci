@@ -12,7 +12,7 @@ set -ex
 CURRENT=$1
 NEXT=$2
 
-for X in $(find . | grep 18.0-fr); do
+for X in $(find . -name .git -prune -o -type f -print | grep 18.0-fr); do
     #rename the file (NOTE: prow jobs require frX in the name)
     NEW_FILE=$(echo $X | sed -e "s|$CURRENT|$NEXT|")
     git mv $X $NEW_FILE

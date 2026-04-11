@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/openshift/release:rhel-9-release-golang-1.20-openshift-4.14
+FROM registry.ci.openshift.org/openshift/release:rhel-9-release-golang-1.24-openshift-4.21
 ARG SDK_VERSION=v1.31.0
 ARG KUSTOMIZE_VERSION=v5.0.3
 ARG YQ_VERSION=v4.44.5

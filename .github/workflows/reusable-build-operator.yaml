@@ -298,6 +298,10 @@ jobs:
         INDEX_IMAGE_TAG: ${{ env.latesttag }}
         INDEX_IMAGE: ${{ inputs.operator_name }}-operator-index
         CSV_VERSION: v${{ steps.get_csv_version.outputs.version }}
+        # opm uses containers/image which now rejects v1-format registries.conf
+        # shipped on ubuntu-latest runners. Safe to bypass since opm render
+        # pulls by fully-qualified reference and needs no registry aliases.
+        CONTAINERS_REGISTRIES_CONF: /dev/null
 
     - name: Push ${{ inputs.operator_name }}-operator-index To ${{ env.imageregistry }}
       uses: redhat-actions/push-to-registry@v2

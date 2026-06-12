@@ -142,6 +142,28 @@ jobs:
           cat <<'EOF' > workflow_functions.sh
           #!/bin/bash
 
+          # Get list of repositories from the repo list file
+          # Returns a space-separated list of repository names
+          get_repos_list() {
+            # Convert to absolute path since we may be changing directories
+            local repo_file="$(realpath "${REPO_LIST_FILE}")"
+
+            if [ ! -f "${repo_file}" ]; then
+              echo "Error: Repository list file '${repo_file}' not found." >&2
+              return 1
+            fi
+
+            # Read repos from YAML file
+            local repos=$(yq e '.repos[].name' "${repo_file}" | tr '\n' ' ')
+
+            if [ -z "$repos" ]; then
+              echo "Error: No repositories found in '${repo_file}'." >&2
+              return 1
+            fi
+
+            echo "$repos"
+          }
+
           # A function to handle committing changes (without pushing).
           # Arguments: 1: Commit Message, 2: File(s) to add
           # Returns: 0 on success, 1 on failure
@@ -303,6 +325,195 @@ jobs:
           }
           EOF
 
+      - name: Check Repository Permissions and Branch Protection
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -e
+          source ./workflow_functions.sh
+
+          echo "=================================================="
+          echo "Checking GitHub App permissions on repositories"
+          echo "NOTE: Running in both DRY_RUN and production modes"
+          echo "=================================================="
+          echo ""
+
+          # Get repos from the list file
+          repos=$(get_repos_list)
+
+          # Add openstack-k8s-operators-ci if we're updating its workflows
+          # (it's not in the feature_branch_repos.yaml list but needs permissions for PR creation)
+          if [ "${{ inputs.UPDATE_CI_WORKFLOWS }}" = "true" ]; then
+            repos="${repos} openstack-k8s-operators-ci"
+          fi
+
+          total_repos=$(echo "$repos" | wc -w)
+          echo "Checking permissions on ${total_repos} repositories..."
+          echo ""
+
+          failed_repos=""
+          warning_repos=""
+          success_count=0
+
+          for repo_name in $repos; do
+            echo "Checking: ${ORG_NAME}/${repo_name}"
+
+            # Try to fetch repository information
+            if ! repo_info=$(gh api "repos/${ORG_NAME}/${repo_name}" 2>&1); then
+              echo "  ❌ ERROR: Cannot access repository"
+              failed_repos="${failed_repos}  - ${repo_name}: Cannot access repository\n"
+              continue
+            fi
+
+            # Check if we have push permissions (need contents: write)
+            can_push=$(echo "$repo_info" | jq -r '.permissions.push // false')
+
+            # Check if we have pull request permissions (need pull_requests: write)
+            can_create_pr=$(echo "$repo_info" | jq -r '.permissions.pull // false')
+
+            if [ "$can_push" != "true" ]; then
+              echo "  ❌ ERROR: Missing 'contents: write' permission (cannot push branches)"
+              failed_repos="${failed_repos}  - ${repo_name}: Missing 'contents: write' permission\n"
+              continue
+            fi
+
+            if [ "$can_create_pr" != "true" ]; then
+              echo "  ❌ ERROR: Missing 'pull_requests: write' permission (cannot create PRs)"
+              failed_repos="${failed_repos}  - ${repo_name}: Missing 'pull_requests: write' permission\n"
+              continue
+            fi
+
+            # Verify we can actually list branches (tests read access)
+            if ! gh api "repos/${ORG_NAME}/${repo_name}/branches" --paginate >/dev/null 2>&1; then
+              echo "  ❌ ERROR: Cannot list branches"
+              failed_repos="${failed_repos}  - ${repo_name}: Cannot list branches\n"
+              continue
+            fi
+
+            # Check for branch protection rules that might block the new branch
+            echo "  → Checking branch protection/rulesets for '${BRANCH_NAME}'..."
+
+            # Check legacy branch protection rules
+            protection_check=false
+            if branch_rules=$(gh api "repos/${ORG_NAME}/${repo_name}/branches" --jq '.[].name' 2>/dev/null); then
+              # Check if any protected branch patterns might match our new branch
+              while IFS= read -r protected_branch; do
+                if [[ -n "$protected_branch" ]]; then
+                  # Get protection status for this branch
+                  if gh api "repos/${ORG_NAME}/${repo_name}/branches/${protected_branch}/protection" >/dev/null 2>&1; then
+                    # Check if the pattern could match our new branch
+                    # Simple pattern matching: if protected_branch contains *, it's a pattern
+                    if [[ "$protected_branch" == *"*"* ]]; then
+                      # Convert glob pattern to regex for basic matching
+                      pattern="${protected_branch//\*/.*}"
+                      if [[ "${BRANCH_NAME}" =~ ^${pattern}$ ]]; then
+                        echo "  ⚠️  WARNING: Branch protection pattern '${protected_branch}' may apply to '${BRANCH_NAME}'"
+                        warning_repos="${warning_repos}  - ${repo_name}: Protected pattern '${protected_branch}' may block '${BRANCH_NAME}'\n"
+                        protection_check=true
+                      fi
+                    elif [[ "$protected_branch" == "${BRANCH_NAME}" ]]; then
+                      echo "  ⚠️  WARNING: Branch '${BRANCH_NAME}' is protected"
+                      warning_repos="${warning_repos}  - ${repo_name}: Branch '${BRANCH_NAME}' is protected\n"
+                      protection_check=true
+                    fi
+                  fi
+                fi
+              done <<< "$branch_rules"
+            fi
+
+            # Check repository rulesets (newer GitHub feature)
+            if rulesets=$(gh api "repos/${ORG_NAME}/${repo_name}/rulesets" 2>/dev/null); then
+              ruleset_count=$(echo "$rulesets" | jq 'length')
+              if [ "$ruleset_count" -gt 0 ]; then
+                echo "  → Found ${ruleset_count} repository ruleset(s), checking for matches..."
+
+                # Check each ruleset
+                for ruleset_id in $(echo "$rulesets" | jq -r '.[].id'); do
+                  ruleset_detail=$(gh api "repos/${ORG_NAME}/${repo_name}/rulesets/${ruleset_id}" 2>/dev/null)
+                  ruleset_name=$(echo "$ruleset_detail" | jq -r '.name')
+
+                  # Check if ruleset is active and applies to our branch
+                  if [ "$(echo "$ruleset_detail" | jq -r '.enforcement')" = "active" ]; then
+                    # Check target conditions
+                    include_patterns=$(echo "$ruleset_detail" | jq -r '.conditions.ref_name.include[]? // empty' 2>/dev/null)
+
+                    if [ -n "$include_patterns" ]; then
+                      while IFS= read -r pattern; do
+                        if [[ -n "$pattern" ]]; then
+                          # Remove refs/heads/ prefix if present
+                          pattern="${pattern#refs/heads/}"
+
+                          # Convert GitHub ref pattern to regex
+                          # GitHub uses glob-like patterns with * and **
+                          regex_pattern="${pattern//\*\*/.*}"
+                          regex_pattern="${regex_pattern//\*/[^/]*}"
+
+                          if [[ "${BRANCH_NAME}" =~ ^${regex_pattern}$ ]]; then
+                            echo "  ⚠️  WARNING: Ruleset '${ruleset_name}' pattern '${pattern}' matches '${BRANCH_NAME}'"
+                            warning_repos="${warning_repos}  - ${repo_name}: Ruleset '${ruleset_name}' may block '${BRANCH_NAME}'\n"
+                            protection_check=true
+                          fi
+                        fi
+                      done <<< "$include_patterns"
+                    fi
+                  fi
+                done
+              fi
+            fi
+
+            if [ "$protection_check" = false ]; then
+              echo "  ✅ No branch protection blocking '${BRANCH_NAME}'"
+            fi
+
+            echo "  ✅ Has required permissions (push: ${can_push}, PR: ${can_create_pr})"
+            ((success_count++))
+          done
+
+          echo ""
+          echo "=================================================="
+          echo "Permission Check Summary"
+          echo "=================================================="
+          echo "Total repositories: ${total_repos}"
+          echo "Passed: ${success_count}"
+
+          if [ -n "$warning_repos" ]; then
+            echo ""
+            echo "⚠️  WARNINGS - Branch Protection May Block Push:"
+            echo -e "$warning_repos"
+            echo ""
+            echo "These repositories have branch protection rules or rulesets that may"
+            echo "prevent pushing the branch '${BRANCH_NAME}'. You may need to:"
+            echo "  • Temporarily disable the protection rules"
+            echo "  • Add an exception for the GitHub App"
+            echo "  • Bypass protection rules if the App has admin permissions"
+            echo ""
+            echo "If you have verified the App can bypass these protections,"
+            echo "you can ignore these warnings and continue."
+            echo ""
+          fi
+
+          if [ -n "$failed_repos" ]; then
+            echo ""
+            echo "❌ FAILED - Missing Permissions on:"
+            echo -e "$failed_repos"
+            echo ""
+            echo "The GitHub App needs the following repository permissions:"
+            echo "  • Contents: Read and write (to push branches)"
+            echo "  • Pull requests: Read and write (to create PRs)"
+            echo ""
+            echo "To fix this:"
+            echo "  1. Go to the GitHub App settings"
+            echo "  2. Update Repository permissions > Contents to 'Read and write'"
+            echo "  3. Update Repository permissions > Pull requests to 'Read and write'"
+            echo "  4. The organization admin must approve the permission changes"
+            echo "  5. Re-run this workflow"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All repositories have required permissions!"
+          echo "=================================================="
+
       - name: Create release branches and update the release branch
         if: inputs.CREATE_RELEASE_BRANCHES
         env:
@@ -327,25 +538,14 @@ jobs:
           echo "Repository List File: ${REPO_LIST_FILE}"
           echo "Source Branch: ${SOURCE_BRANCH}"
           echo "-------------------------------------------"
- 
+
           echo "Reading repository list from '${REPO_LIST_FILE}'..."
-          # Check if the repository list file exists
-          if [ ! -f "${REPO_LIST_FILE}" ]; then
-            echo "Error: Repository list file '${REPO_LIST_FILE}' not found."
-            exit 1
-          fi
+          # Get repositories from the list file using the function
+          repos=$(get_repos_list)
 
           # Convert to absolute path since we'll be changing directories
           REPO_LIST_FILE="$(realpath "${REPO_LIST_FILE}")"
           echo "Using repository list file: ${REPO_LIST_FILE}"
-
-          # Read repositories from YAML file
-          repos=$(yq e '.repos[].name' "${REPO_LIST_FILE}" | tr '\n' ' ')
-
-          if [ -z "$repos" ]; then
-            echo "No repositories found in '${REPO_LIST_FILE}'."
-            exit 1
-          fi
 
           total_repos=$(echo "$repos" | wc -w)
           echo "Found ${total_repos} repositories to process from file."

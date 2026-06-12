@@ -46,7 +46,6 @@ EOF_CAT
  openstack-k8s-operators/mariadb-operator \
  openstack-k8s-operators/cinder-operator \
  openstack-k8s-operators/glance-operator \
- openstack-k8s-operators/placement-operator \
  openstack-k8s-operators/manila-operator \
  openstack-k8s-operators/ironic-operator \
  openstack-k8s-operators/openstack-baremetal-operator \

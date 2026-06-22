@@ -67,14 +67,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Get branch name
-      id: branch-name
-      uses: tj-actions/branch-names@v7
-
     - name: Set latest tag for non main branch
-      if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
+      if: github.ref_name != 'main'
+      env:
+        BRANCH_NAME: ${{ github.ref_name }}
       run: |
-        latesttag=${{ steps.branch-name.outputs.current_branch }}-latest
+        latesttag="${BRANCH_NAME}-latest"
         echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Buildah Action
@@ -161,14 +159,12 @@ jobs:
         BASE_IMAGE: ${{ inputs.operator_name }}-operator
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Get branch name
-      id: branch-name
-      uses: tj-actions/branch-names@v7
-
     - name: Set latest tag for non main branch
-      if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
+      if: github.ref_name != 'main'
+      env:
+        BRANCH_NAME: ${{ github.ref_name }}
       run: |
-        latesttag=${{ steps.branch-name.outputs.current_branch }}-latest
+        latesttag="${BRANCH_NAME}-latest"
         echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Build operator-bundle using buildah
@@ -224,14 +220,12 @@ jobs:
     - name: Checkout ${{ inputs.operator_name }}-operator repository
       uses: actions/checkout@v4
 
-    - name: Get branch name
-      id: branch-name
-      uses: tj-actions/branch-names@v7
-
     - name: Set latest tag for non main branch
-      if: "${{ steps.branch-name.outputs.current_branch != 'main' }}"
+      if: github.ref_name != 'main'
+      env:
+        BRANCH_NAME: ${{ github.ref_name }}
       run: |
-        latesttag=${{ steps.branch-name.outputs.current_branch }}-latest
+        latesttag="${BRANCH_NAME}-latest"
         echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Install opm

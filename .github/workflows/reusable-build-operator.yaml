@@ -65,7 +65,7 @@ jobs:
     if: needs.check-secrets.outputs.missing-secrets != 'true'
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
     - name: Set latest tag for non main branch
       if: github.ref_name != 'main'
@@ -127,7 +127,7 @@ jobs:
         cache: false
 
     - name: Checkout ${{ inputs.operator_name }}-operator repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
     - name: Install operator-sdk
       uses: redhat-actions/openshift-tools-installer@v1
@@ -218,7 +218,7 @@ jobs:
         cache: false
 
     - name: Checkout ${{ inputs.operator_name }}-operator repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
     - name: Set latest tag for non main branch
       if: github.ref_name != 'main'

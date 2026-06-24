@@ -49,7 +49,7 @@ jobs:
           echo "System dependencies installed"
 
       - name: 2. Clone ci-framework Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ inputs.ci_framework_repo || 'openstack-k8s-operators/ci-framework' }}
           ref: ${{ inputs.ci_framework_ref || 'main' }}

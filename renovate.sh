@@ -1,5 +1,12 @@
 # This is what we use to run a self-hosted Renovate to create github PR's.
 # Running self-hosted is required to be able to execute the postUpgradeCommands
+#
+# Required environment variables (set in ~/.bash_profile on the runner):
+#   RENOVATE_GITHUB_APP_ID          - GitHub App ID
+#   RENOVATE_GITHUB_INSTALLATION_ID - GitHub App Installation ID
+#   RENOVATE_GITHUB_APP_KEY         - Path to GitHub App private key (.pem)
+#
+# See docs/renovate-github-app-setup.md for setup instructions.
 set -v
 
 while true
@@ -31,10 +38,17 @@ EOF_CAT
 
  log_file="$log_dir/renovate_$(date +'%Y%m%d_%H%M%S').log"
 
+ # Generate a GitHub App installation token (expires after 1 hour)
+ RENOVATE_GITHUB_APP_TOKEN=$(podman run --rm \
+   -v "${RENOVATE_GITHUB_APP_KEY}:/key.pem:ro,Z" \
+   ghcr.io/mshekow/github-app-installation-token:latest \
+   "${RENOVATE_GITHUB_APP_ID}" \
+   "${RENOVATE_GITHUB_INSTALLATION_ID}" \
+   "/key.pem")
+
  echo "Running Renovate..."
- podman run -e BINDATA_GIT_ADD=true -e LOG_LEVEL=debug --rm \
+ podman run -e RENOVATE_TOKEN="${RENOVATE_GITHUB_APP_TOKEN}" -e BINDATA_GIT_ADD=true -e LOG_LEVEL=debug --rm \
  localhost/renovate:local \
- --token="${RENOVATE_TOKEN}" \
  --git-author="OpenStack K8s CI <openstack-k8s@redhat.com>" \
  --update-not-scheduled=false \
  --allowed-post-upgrade-commands="^make manifests generate,^make bindata,^make gowork,^go mod tidy,^make tidy,^make force-bump,^git reset" \
@@ -59,7 +73,8 @@ EOF_CAT
  openstack-k8s-operators/barbican-operator \
  openstack-k8s-operators/swift-operator \
  openstack-k8s-operators/test-operator \
- openstack-k8s-operators/watcher-operator 2>&1 | tee $log_file
+ openstack-k8s-operators/watcher-operator \
+ openstack-k8s-operators/openstack-k8s-operators-ci 2>&1 | tee $log_file
 
  echo "sleeping 60 minutes..."
  sleep 3600

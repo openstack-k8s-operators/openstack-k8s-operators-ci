@@ -62,7 +62,7 @@ jobs:
           sudo chown $(whoami):$(whoami) ${{ env.CUSTOM_IMAGE_FILE }}
 
       - name: 4. Create GitHub Release and Upload Artifact
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           # This is the tag you provided as input
           tag_name: ${{ inputs.release_tag }}

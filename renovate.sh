@@ -49,7 +49,7 @@ EOF_CAT
  echo "Running Renovate..."
  podman run -e RENOVATE_TOKEN="${RENOVATE_GITHUB_APP_TOKEN}" -e BINDATA_GIT_ADD=true -e LOG_LEVEL=debug --rm \
  localhost/renovate:local \
- --git-author="OpenStack K8s CI <openstack-k8s@redhat.com>" \
+ --git-author="ospk8s-renovate[bot] <296544045+ospk8s-renovate[bot]@users.noreply.github.com>" \
  --update-not-scheduled=false \
  --allowed-post-upgrade-commands="^make manifests generate,^make bindata,^make gowork,^go mod tidy,^make tidy,^make force-bump,^git reset" \
  openstack-k8s-operators/openstack-operator \

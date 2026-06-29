@@ -4,5 +4,12 @@
   ],
   "baseBranchPatterns": [
     "main"
+  ],
+  "packageRules": [
+    {
+      "description": "Don't bump runs-on runner versions — some workflows pin older runners due to tool compatibility issues (e.g. virt-customize fails on ubuntu-24.04)",
+      "matchDatasources": ["github-runners"],
+      "enabled": false
+    }
   ]
 }

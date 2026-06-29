@@ -44,7 +44,12 @@ EOF_CAT
    ghcr.io/mshekow/github-app-installation-token:latest \
    "${RENOVATE_GITHUB_APP_ID}" \
    "${RENOVATE_GITHUB_INSTALLATION_ID}" \
-   "/key.pem")
+   "/key.pem") || { echo "ERROR: Failed to generate GitHub App token"; continue; }
+
+ if [ -z "${RENOVATE_GITHUB_APP_TOKEN}" ]; then
+   echo "ERROR: GitHub App token is empty"
+   continue
+ fi
 
  echo "Running Renovate..."
  podman run -e RENOVATE_TOKEN="${RENOVATE_GITHUB_APP_TOKEN}" -e BINDATA_GIT_ADD=true -e LOG_LEVEL=debug --rm \

@@ -65,7 +65,7 @@ jobs:
     if: needs.check-secrets.outputs.missing-secrets != 'true'
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
     - name: Set latest tag for non main branch
       if: github.ref_name != 'main'
@@ -121,13 +121,13 @@ jobs:
 
     steps:
     - name: Install Go
-      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
       with:
         go-version: ${{ inputs.go_version }}
         cache: false
 
     - name: Checkout ${{ inputs.operator_name }}-operator repository
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
     - name: Install operator-sdk
       uses: redhat-actions/openshift-tools-installer@144527c7d98999f2652264c048c7a9bd103f8a82 # v1
@@ -212,13 +212,13 @@ jobs:
 
     steps:
     - name: Install Go
-      uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
       with:
         go-version: ${{ inputs.go_version }}
         cache: false
 
     - name: Checkout ${{ inputs.operator_name }}-operator repository
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
     - name: Set latest tag for non main branch
       if: github.ref_name != 'main'

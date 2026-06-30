@@ -46,7 +46,7 @@ jobs:
 
     steps:
       - name: 1. Checkout Repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: 2. Prepare Config Files
         run: |
@@ -99,7 +99,7 @@ jobs:
           sudo chown $(whoami):$(whoami) ${{ env.CUSTOM_IMAGE_FILE }}
 
       - name: 7. Create GitHub Release and Upload Artifact
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
           # This is the tag you provided as input
           tag_name: ${{ inputs.release_tag }}

@@ -49,7 +49,7 @@ jobs:
           echo "System dependencies installed"
 
       - name: 2. Clone ci-framework Repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ inputs.ci_framework_repo || 'openstack-k8s-operators/ci-framework' }}
           ref: ${{ inputs.ci_framework_ref || 'main' }}
@@ -148,7 +148,7 @@ jobs:
           ls -lh ${{ github.workspace }}/${TAGGED_IMAGE}
 
       - name: 8. Create Versioned GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
           tag_name: ${{ steps.release_tag.outputs.release_tag }}
           name: "NAT64 Appliance ${{ steps.release_tag.outputs.release_tag }}"
@@ -170,7 +170,7 @@ jobs:
           files: ${{ steps.release_tag.outputs.tagged_image }}
 
       - name: 9. Update 'latest' Release Tag
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
           tag_name: latest
           name: "NAT64 Appliance (Latest)"

@@ -79,7 +79,9 @@ EOF_CAT
  openstack-k8s-operators/swift-operator \
  openstack-k8s-operators/test-operator \
  openstack-k8s-operators/watcher-operator \
- openstack-k8s-operators/openstack-k8s-operators-ci 2>&1 | tee $log_file
+ openstack-k8s-operators/openstack-k8s-operators-ci \
+ openstack-k8s-operators/openstack-must-gather \
+ openstack-k8s-operators/edpm-ansible 2>&1 | tee $log_file
 
  echo "sleeping 60 minutes..."
  sleep 3600

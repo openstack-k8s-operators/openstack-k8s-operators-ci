@@ -22,5 +22,5 @@ fi
 
 pushd ${MODULE_DIR}
 
-GOWORK=$GOWORK GOGC=10 GOLANGCI_LINT_CACHE=/tmp/golangci-cache ${BASE_DIR}/../../bin/golangci-lint run --timeout=${TIMEOUT}m -v
+GOWORK=$GOWORK GOGC=10 GOLANGCI_LINT_CACHE=${GOLANGCI_LINT_CACHE:-/tmp/golangci-cache} ${BASE_DIR}/../../bin/golangci-lint run --timeout=${TIMEOUT}m -v
 popd

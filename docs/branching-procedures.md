@@ -45,8 +45,12 @@ This is done once when development shifts to the next major version.
 1. Creates `18-stable` branch from `main` in all repos listed in `feature_branch_repos.yaml`
 2. Updates `BRANCH` variable in Makefile on `18-stable` to `18-stable`
 3. Updates `default_images.yaml` on `18-stable` (openstack-operator only)
-4. Creates a PR on `main` in openstack-operator bumping `VERSION` to `19.0.0`
-5. Creates a PR in openstack-k8s-operators-ci updating force-bump-branches matrix
+4. Updates `renovate.json` on `18-stable` to extend `18-stable.json5` instead of `default.json5`
+5. Creates a PR on `main` in openstack-operator bumping `VERSION` to `19.0.0`
+6. Creates a PR in openstack-k8s-operators-ci updating force-bump-branches matrix
+
+**Manual prerequisite:**
+- Create `18-stable.json5` in the `renovate-config` repo before running the workflow. Copy from `default.json5` and adjust dependency bounds for the RHOSO 18 OCP target.
 
 See [Checklist](#checklist) and [Post-branching tasks](#post-branching-tasks-fr-branches).
 
@@ -132,6 +136,7 @@ Before running the workflow:
 - [ ] Verify `feature_branch_repos.yaml` is up to date
 - [ ] Confirm version numbering with the team
 - [ ] Check that `FORCE_BUMP_BRANCHES` includes all active branches
+- [ ] For stable branches: create `<branch-name>.json5` in the `renovate-config` repo (copy from `default.json5`, adjust dependency bounds)
 
 After running the workflow:
 - [ ] Merge the openstack-operator version bump PR

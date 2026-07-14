@@ -33,7 +33,7 @@ on:
         type: boolean
         default: true
       UPDATE_OPENSTACK_OPERATOR:
-        description: 'Enable updating openstack-operator main branch'
+        description: 'Enable updating openstack-operator source branch'
         required: false
         type: boolean
         default: true
@@ -476,6 +476,24 @@ jobs:
               fi
             fi
 
+            # For stable branches: update renovate.json to use <branch-name>.json5
+            if [[ "$BRANCH_NAME" == *"stable"* ]] && [ -f "renovate.json" ]; then
+              echo "Stable branch detected. Updating renovate.json to use ${BRANCH_NAME}.json5..."
+              # Replace the extends reference to use the branch-specific config
+              sed -i "s|renovate-config:default\.json5|renovate-config:${BRANCH_NAME}.json5|g" renovate.json
+              # Replace baseBranchPatterns to target the stable branch (only in baseBranchPatterns array)
+              jq --arg branch "${BRANCH_NAME}" '.baseBranchPatterns = [$branch]' renovate.json > renovate.json.tmp && mv renovate.json.tmp renovate.json
+
+              if ! git diff --quiet -- renovate.json; then
+                echo "Changes detected in renovate.json"
+                if ! commit "[${BRANCH_NAME}] Update renovate.json for stable branch" "renovate.json"; then
+                  handle_repo_error "${repo_name}" "Failed to commit renovate.json changes" "$TEMP_DIR"
+                fi
+              else
+                echo "No changes detected in renovate.json."
+              fi
+            fi
+
             # Push the branch (with commits if any were made, or as empty branch)
             if [ "$DRY_RUN" != "true" ]; then
               echo "Pushing branch ${BRANCH_NAME}..."
@@ -560,12 +578,12 @@ jobs:
           cd "$TEMP_DIR" || { echo "::error::Failed to change to openstack-operator directory"; exit 1; }
 
           # Update workflows on the source branch
-          if ! git checkout ${SOURCE_BRANCH}; then
+          if ! git checkout "${SOURCE_BRANCH}"; then
             echo "::error::Failed to checkout ${SOURCE_BRANCH} branch in openstack-operator"
             exit 1
           fi
 
-          if ! git pull origin ${SOURCE_BRANCH}; then
+          if ! git pull origin "${SOURCE_BRANCH}"; then
             echo "::error::Failed to pull latest changes from ${SOURCE_BRANCH} branch in openstack-operator"
             exit 1
           fi

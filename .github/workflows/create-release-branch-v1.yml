@@ -5,16 +5,21 @@ on:
   # This workflow can be run manually from the Actions tab.
   workflow_dispatch:
     inputs:
+      SOURCE_BRANCH:
+        description: 'The branch to create the new branch from (default: main).'
+        required: false
+        type: string
+        default: 'main'
       BRANCH_NAME:
-        description: 'The name of the new feature/release branch to create, e.g. 18.0-fr3 .'
+        description: 'The name of the new feature/release branch to create, e.g. 18.0-fr7, 19.0, 18-stable .'
         required: true
         type: string
       NEW_VERSION:
-        description: 'The new version to set in the Makefile on the main/source branch, e.g. 0.5 .'
+        description: 'The new version to set in the Makefile on the source branch. Use 0.x for RHOSO 18, 19.x for RHOSO 19 (e.g. 0.8, 19.1).'
         required: true
         type: string
       FORCE_BUMP_BRANCHES:
-        description: 'The new list of branches for the force-bump-branches.yaml workflow, e.g. ["main", "18.0-fr3"] .'
+        description: 'All active branches for the force-bump workflow, e.g. ["main", "18-stable", "18.0-fr6"].'
         required: true
         type: string
       DRY_RUN:
@@ -28,7 +33,7 @@ on:
         type: boolean
         default: true
       UPDATE_OPENSTACK_OPERATOR:
-        description: 'Enable updating openstack-operator main branch'
+        description: 'Enable updating openstack-operator source branch'
         required: false
         type: boolean
         default: true
@@ -62,8 +67,7 @@ jobs:
       OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
       # 'The relative path to the file containing the list of repositories to process.'
       REPO_LIST_FILE: 'feature_branch_repos.yaml'
-      # 'The branch to create the new branch from.'
-      SOURCE_BRANCH: 'main'
+      SOURCE_BRANCH: ${{ inputs.SOURCE_BRANCH }}
       # 'Timeout for git operations (in seconds)'
       GIT_TIMEOUT: '300'
     steps:
@@ -472,6 +476,24 @@ jobs:
               fi
             fi
 
+            # For stable branches: update renovate.json to use <branch-name>.json5
+            if [[ "$BRANCH_NAME" == *"stable"* ]] && [ -f "renovate.json" ]; then
+              echo "Stable branch detected. Updating renovate.json to use ${BRANCH_NAME}.json5..."
+              # Replace the extends reference to use the branch-specific config
+              sed -i "s|renovate-config:default\.json5|renovate-config:${BRANCH_NAME}.json5|g" renovate.json
+              # Replace baseBranchPatterns to target the stable branch (only in baseBranchPatterns array)
+              jq --arg branch "${BRANCH_NAME}" '.baseBranchPatterns = [$branch]' renovate.json > renovate.json.tmp && mv renovate.json.tmp renovate.json
+
+              if ! git diff --quiet -- renovate.json; then
+                echo "Changes detected in renovate.json"
+                if ! commit "[${BRANCH_NAME}] Update renovate.json for stable branch" "renovate.json"; then
+                  handle_repo_error "${repo_name}" "Failed to commit renovate.json changes" "$TEMP_DIR"
+                fi
+              else
+                echo "No changes detected in renovate.json."
+              fi
+            fi
+
             # Push the branch (with commits if any were made, or as empty branch)
             if [ "$DRY_RUN" != "true" ]; then
               echo "Pushing branch ${BRANCH_NAME}..."
@@ -531,7 +553,7 @@ jobs:
           
           echo "-------------------------------------------"
 
-      - name: Update openstack-operator main branch
+      - name: Update openstack-operator source branch
         # Only run if previous steps were successful and parameter is enabled
         if: success() && inputs.UPDATE_OPENSTACK_OPERATOR
         env:
@@ -555,14 +577,14 @@ jobs:
           
           cd "$TEMP_DIR" || { echo "::error::Failed to change to openstack-operator directory"; exit 1; }
 
-          # Update workflows on the main branch
-          if ! git checkout main; then
-            echo "::error::Failed to checkout main branch in openstack-operator"
+          # Update workflows on the source branch
+          if ! git checkout "${SOURCE_BRANCH}"; then
+            echo "::error::Failed to checkout ${SOURCE_BRANCH} branch in openstack-operator"
             exit 1
           fi
-          
-          if ! git pull origin main; then
-            echo "::error::Failed to pull latest changes from main branch in openstack-operator"
+
+          if ! git pull origin "${SOURCE_BRANCH}"; then
+            echo "::error::Failed to pull latest changes from ${SOURCE_BRANCH} branch in openstack-operator"
             exit 1
           fi
 
@@ -682,7 +704,7 @@ jobs:
               PR_URL=$(gh pr create \
                 --title "Bump version to ${NEW_VERSION}.0 for ${BRANCH_NAME} release" \
                 --body "${PR_BODY}" \
-                --base main \
+                --base "${SOURCE_BRANCH}" \
                 --head "${PR_BRANCH}" \
                 --repo "${ORG_NAME}/openstack-operator")
 

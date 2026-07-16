@@ -34,7 +34,6 @@ repos:
   - name: openstack-network-exporter
   - name: openstack-operator
   - name: ovn-operator
-  - name: placement-operator
   - name: prometheus-podman-exporter
     skip_makefile_changes: true
   - name: sg-core

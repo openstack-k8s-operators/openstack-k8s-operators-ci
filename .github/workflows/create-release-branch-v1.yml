@@ -679,6 +679,55 @@ jobs:
             echo "No ${WORKFLOW_FILE} found."
           fi
 
+          # Create CRD sync check workflow for the new branch
+          CRD_SYNC_FILE=".github/workflows/crd-sync-check-${BRANCH_NAME}.yaml"
+          if [ ! -f "${CRD_SYNC_FILE}" ]; then
+            echo "Creating CRD sync check workflow for ${BRANCH_NAME}..."
+            cat > "${CRD_SYNC_FILE}" <<CRDEOF
+name: CRD sync check ${BRANCH_NAME}
+
+on:
+  schedule:
+    - cron: '0 */2 * * *' # every 2 hours
+  workflow_dispatch:
+
+jobs:
+  call-build-workflow:
+    if: github.repository_owner == 'openstack-k8s-operators'
+    uses: ./.github/workflows/crd-sync-check.yaml
+    with:
+      branch_name: ${BRANCH_NAME}
+CRDEOF
+            echo "Created ${CRD_SYNC_FILE}"
+            FILES_TO_COMMIT="$FILES_TO_COMMIT ${CRD_SYNC_FILE}"
+            CHANGES_MADE=true
+          else
+            echo "CRD sync check workflow ${CRD_SYNC_FILE} already exists."
+          fi
+
+          # Update README.md CRD sync check badges to reflect active branches
+          if [ -f "README.md" ]; then
+            echo "Updating README.md CRD sync check badges..."
+            # Remove existing CRD sync check badge lines (except main)
+            sed -i '/\[CRD sync check [^m]/d' README.md
+            # Generate badge lines for each branch in FORCE_BUMP_BRANCHES (except main)
+            BADGE_LINES=""
+            for fb in $(echo "${FORCE_BUMP_BRANCHES}" | yq e '.[]' -); do
+              if [ "$fb" != "main" ]; then
+                BADGE_LINES="${BADGE_LINES}[![CRD sync check ${fb}](https://github.com/openstack-k8s-operators/openstack-operator/actions/workflows/crd-sync-check-${fb}.yaml/badge.svg)](https://github.com/openstack-k8s-operators/openstack-operator/actions/workflows/crd-sync-check-${fb}.yaml)\n"
+              fi
+            done
+            # Insert badge lines after the main CRD sync check line
+            if [ -n "$BADGE_LINES" ]; then
+              sed -i "/\[CRD sync check main\]/a\\${BADGE_LINES%\\n}" README.md
+            fi
+            if ! git diff --quiet -- README.md; then
+              echo "Updated README.md with CRD sync check badges"
+              FILES_TO_COMMIT="$FILES_TO_COMMIT README.md"
+              CHANGES_MADE=true
+            fi
+          fi
+
           # If changes were made, commit and create PR
           if [ "$CHANGES_MADE" = "true" ]; then
             echo "Changes detected. Preparing to commit and create pull request..."

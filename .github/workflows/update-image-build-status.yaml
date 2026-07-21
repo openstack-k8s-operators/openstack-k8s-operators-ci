@@ -109,21 +109,20 @@ jobs:
               fi
             done
 
-            ROWS="${ROWS}${ROW}
-"
+            ROWS="${ROWS}${ROW}"$'\n'
           done <<< "${ALL_OPERATORS}"
 
           # Remove trailing newline from ROWS
           ROWS=$(echo -n "${ROWS}" | sed '/^$/d')
 
           # Write the file
-          cat > docs/image-build-status.md <<EOF
-# Post Merge Image Build Status
-
-${HEADER}
-${SEPARATOR}
-${ROWS}
-EOF
+          {
+            echo "# Post Merge Image Build Status"
+            echo ""
+            echo "${HEADER}"
+            echo "${SEPARATOR}"
+            echo "${ROWS}"
+          } > docs/image-build-status.md
 
       - name: Check for changes
         id: changes

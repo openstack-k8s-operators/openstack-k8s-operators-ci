@@ -103,12 +103,12 @@ jobs:
             echo "Please provide it in the format [\"item1\", \"item2\"]."
             exit 1
           fi
- 
+
           if [[ -z "$BRANCH_NAME" ]] || [[ -z "$NEW_VERSION" ]]; then
             echo "Error: Required inputs BRANCH_NAME or NEW_VERSION were not provided."
             exit 1
           fi
-          
+
           # Validate that BRANCH_NAME is included in FORCE_BUMP_BRANCHES
           if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e "contains([\"${BRANCH_NAME}\"])" >/dev/null 2>&1; then
             echo "Error: BRANCH_NAME '${BRANCH_NAME}' must be included in FORCE_BUMP_BRANCHES list."
@@ -116,22 +116,22 @@ jobs:
             echo "Please add '${BRANCH_NAME}' to the FORCE_BUMP_BRANCHES array."
             exit 1
           fi
-          
+
           # Validate GitHub App has sufficient permissions
           echo "Validating GitHub App permissions..."
           if ! gh auth status >/dev/null 2>&1; then
             echo "Error: GitHub App token authentication failed."
             exit 1
           fi
-          
+
           # Test API access to organization
           if ! gh api "orgs/${ORG_NAME}" >/dev/null 2>&1; then
             echo "Error: Cannot access organization '${ORG_NAME}'. Check GitHub App permissions."
             exit 1
           fi
-          
+
           echo "✅ Inputs and permissions validated successfully."
- 
+
       - name: Checkout code (for the workflow itself)
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -203,7 +203,7 @@ jobs:
 
             if [ ! -f "${file_path}" ]; then echo "Error: File '${file_path}' not found. Skipping."; return; fi
             if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Error: Path '${yq_path}' not found in '${file_path}'."; return; fi
-            
+
             # Get the tag of the existing node to determine its type
             local current_tag
             current_tag=$(yq e "(${yq_path}) | tag" "${file_path}")
@@ -217,7 +217,7 @@ jobs:
               echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
               yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
             fi
-          } 
+          }
 
           # Reads a value from a YAML file using a yq path.
           # Arguments: 1: File Path, 2: YQ Target Path
@@ -237,15 +237,15 @@ jobs:
             local repo_name="$1"
             local error_message="$2"
             local temp_dir="$3"
-            
+
             echo "❌ CRITICAL ERROR in repository: ${repo_name}"
             echo "Error: ${error_message}"
-            
+
             # Cleanup
             if [[ -n "$temp_dir" && -d "$temp_dir" ]]; then
               cd .. && rm -rf "$temp_dir"
             fi
-            
+
             # Fail the entire workflow
             echo "::error::Repository ${repo_name} failed: ${error_message}"
             exit 1
@@ -265,19 +265,19 @@ jobs:
             local delay=$2
             local description="$3"
             shift 3
-            
+
             local attempt=1
             while [ $attempt -le $max_retries ]; do
               echo "Attempt $attempt of $max_retries: $description"
               if timeout_command "$@"; then
                 return 0
               fi
-              
+
               if [ $attempt -eq $max_retries ]; then
                 echo "❌ Failed after $max_retries attempts: $description"
                 return 1
               fi
-              
+
               echo "⚠️ Attempt $attempt failed, retrying in ${delay}s..."
               sleep $delay
               ((attempt++))
@@ -315,14 +315,14 @@ jobs:
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
-          
+
           # Set up cleanup trap for graceful interruption handling
           setup_cleanup_trap
- 
+
           if [ "$DRY_RUN" = "true" ]; then
             echo "!!! --- Running in DRY RUN mode. No changes will be pushed. --- !!!"
           fi
- 
+
           echo "Running with the following configuration:"
           echo "Organization: ${ORG_NAME}"
           echo "Feature Branch Name: ${BRANCH_NAME}"
@@ -331,7 +331,7 @@ jobs:
           echo "Repository List File: ${REPO_LIST_FILE}"
           echo "Source Branch: ${SOURCE_BRANCH}"
           echo "-------------------------------------------"
- 
+
           echo "Reading repository list from '${REPO_LIST_FILE}'..."
           # Check if the repository list file exists
           if [ ! -f "${REPO_LIST_FILE}" ]; then
@@ -376,12 +376,12 @@ jobs:
 
             TEMP_DIR=$(mktemp -d)
             echo "Cloning repository into ${TEMP_DIR}..."
-            
+
             # FAIL if clone fails (with retry for transient network issues)
             if ! retry_command 3 5 "Cloning ${repo_name}" git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/${repo_name}.git" "$TEMP_DIR"; then
               handle_repo_error "${repo_name}" "Failed to clone repository after retries" "$TEMP_DIR"
             fi
- 
+
             cd "$TEMP_DIR" || handle_repo_error "${repo_name}" "Failed to change to repository directory" "$TEMP_DIR"
 
             # FAIL if source branch doesn't exist
@@ -397,14 +397,14 @@ jobs:
               ((current_repo++))
               continue
             fi
- 
+
             echo "Creating branch '${BRANCH_NAME}' from '${SOURCE_BRANCH}'..."
-            
+
             # FAIL if checkout operations fail
             if ! timeout_command git checkout ${SOURCE_BRANCH}; then
               handle_repo_error "${repo_name}" "Failed to checkout source branch '${SOURCE_BRANCH}'" "$TEMP_DIR"
             fi
-            
+
             if ! timeout_command git checkout -b ${BRANCH_NAME}; then
               handle_repo_error "${repo_name}" "Failed to create new branch '${BRANCH_NAME}'" "$TEMP_DIR"
             fi
@@ -520,17 +520,17 @@ jobs:
           echo "-------------------------------------------"
           echo "🔍 FINAL WORKFLOW STATUS REPORT"
           echo "-------------------------------------------"
-          
+
           # Count results
           successful_count=$(wc -l < /tmp/successful_repos.txt)
           skipped_count=$(wc -l < /tmp/skipped_repos.txt)
           total_checked=$(echo "$repos" | wc -w)
-          
+
           echo "📊 Processing Summary:"
           echo "  • Total repositories from list: ${total_checked}"
           echo "  • Successfully processed: ${successful_count}"
           echo "  • Skipped (already exists or handled separately): ${skipped_count}"
-          
+
           if [ "$DRY_RUN" = "true" ]; then
             echo ""
             echo "🧪 DRY RUN COMPLETE - No actual changes were made"
@@ -546,7 +546,7 @@ jobs:
           else
             echo "  • No new branches were created."
           fi
-          
+
           if [ -s /tmp/skipped_repos.txt ]; then
             echo ""
             echo "ℹ️ Skipped repositories:"
@@ -554,7 +554,7 @@ jobs:
               echo "  • ${repo}"
             done < /tmp/skipped_repos.txt
           fi
-          
+
           echo "-------------------------------------------"
 
       - name: Update openstack-operator source branch
@@ -566,19 +566,19 @@ jobs:
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
-          
+
           # Set up cleanup trap for graceful interruption handling
           setup_cleanup_trap
- 
+
           echo "--- Updating REPOSITORY: openstack-operator ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
-          
+
           if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-operator.git" "$TEMP_DIR"; then
             echo "::error::Failed to clone openstack-operator repository"
             exit 1
           fi
-          
+
           cd "$TEMP_DIR" || { echo "::error::Failed to change to openstack-operator directory"; exit 1; }
 
           # Update workflows on the source branch
@@ -642,7 +642,7 @@ jobs:
           if [ -f "${WORKFLOW_FILE}" ]; then
             # 1. Find the index of the step to update
             index=$(yq '.jobs.build-catalog.steps | to_entries | .[] | select(.value.name == "Create the catalog index") | .key' ${WORKFLOW_FILE})
- 
+
             # 2. Check if an index was found
             if [ -z "$index" ]; then
               echo "Step 'Create the catalog index' not found."
@@ -683,21 +683,21 @@ jobs:
           CRD_SYNC_FILE=".github/workflows/crd-sync-check-${BRANCH_NAME}.yaml"
           if [ ! -f "${CRD_SYNC_FILE}" ]; then
             echo "Creating CRD sync check workflow for ${BRANCH_NAME}..."
-            cat > "${CRD_SYNC_FILE}" <<CRDEOF
-name: CRD sync check ${BRANCH_NAME}
-
-on:
-  schedule:
-    - cron: '0 */2 * * *' # every 2 hours
-  workflow_dispatch:
-
-jobs:
-  call-build-workflow:
-    if: github.repository_owner == 'openstack-k8s-operators'
-    uses: ./.github/workflows/crd-sync-check.yaml
-    with:
-      branch_name: ${BRANCH_NAME}
-CRDEOF
+            {
+              echo "name: CRD sync check ${BRANCH_NAME}"
+              echo ""
+              echo "on:"
+              echo "  schedule:"
+              echo "    - cron: '0 */2 * * *' # every 2 hours"
+              echo "  workflow_dispatch:"
+              echo ""
+              echo "jobs:"
+              echo "  call-build-workflow:"
+              echo "    if: github.repository_owner == 'openstack-k8s-operators'"
+              echo "    uses: ./.github/workflows/crd-sync-check.yaml"
+              echo "    with:"
+              echo "      branch_name: ${BRANCH_NAME}"
+            } > "${CRD_SYNC_FILE}"
             echo "Created ${CRD_SYNC_FILE}"
             FILES_TO_COMMIT="$FILES_TO_COMMIT ${CRD_SYNC_FILE}"
             CHANGES_MADE=true
@@ -783,19 +783,19 @@ CRDEOF
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
-          
+
           # Set up cleanup trap for graceful interruption handling
           setup_cleanup_trap
 
           echo "--- Updating REPOSITORY: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
-          
+
           if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-k8s-operators-ci.git" "$TEMP_DIR"; then
             echo "::error::Failed to clone openstack-k8s-operators-ci repository"
             exit 1
           fi
-          
+
           cd "$TEMP_DIR" || { echo "::error::Failed to change to openstack-k8s-operators-ci directory"; exit 1; }
 
           # Update workflows on the main branch
@@ -894,4 +894,3 @@ CRDEOF
       IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
-

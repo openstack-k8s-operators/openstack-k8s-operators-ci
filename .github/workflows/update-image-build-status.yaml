@@ -1,0 +1,159 @@
+name: Update image build status page
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: 'Comma-separated list of active branches (e.g., main,18-stable,18.0-fr6)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Show changes without creating a PR'
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      branches:
+        description: 'Comma-separated list of active branches'
+        required: true
+        type: string
+      dry_run:
+        description: 'Show changes without creating a PR'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  update-status-page:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate a token from the GitHub App
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Generate image build status page
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCHES: ${{ inputs.branches }}
+          ORG_NAME: ${{ github.repository_owner }}
+        run: |
+          set -eo pipefail
+
+          echo "Generating image build status page for branches: ${BRANCHES}"
+
+          IFS=',' read -ra BRANCH_ARRAY <<< "${BRANCHES}"
+
+          # For each branch, get the operator list from openstack-operator go.mod
+          declare -A BRANCH_OPERATORS
+          ALL_OPERATORS=""
+
+          for branch in "${BRANCH_ARRAY[@]}"; do
+            branch=$(echo "$branch" | xargs)
+            echo "Fetching operator list from openstack-operator go.mod on branch ${branch}..."
+
+            operators=$(gh api "repos/${ORG_NAME}/openstack-operator/contents/go.mod?ref=${branch}" --jq '.content' | base64 -d \
+              | grep 'openstack-k8s-operators/' \
+              | grep -v '//' \
+              | grep -v 'lib-common' \
+              | sed 's|.*openstack-k8s-operators/||; s|/api .*||; s|/apis .*||; s|/modules/.*||; s| .*||' \
+              | sort -u)
+
+            if [ -z "$operators" ]; then
+              echo "Warning: Could not fetch operators for branch ${branch}"
+              continue
+            fi
+
+            BRANCH_OPERATORS["${branch}"]="${operators}"
+            ALL_OPERATORS=$(echo -e "${ALL_OPERATORS}\n${operators}" | sort -u | grep -v '^$')
+            echo "  Found $(echo "$operators" | wc -l) operators on ${branch}"
+          done
+
+          # Build the header
+          HEADER="| Operator |"
+          SEPARATOR="|----------|"
+          for branch in "${BRANCH_ARRAY[@]}"; do
+            branch=$(echo "$branch" | xargs)
+            HEADER="${HEADER} ${branch} |"
+            SEPARATOR="${SEPARATOR}------|"
+          done
+
+          # Build the table rows
+          ROWS=""
+          while IFS= read -r operator; do
+            [ -z "$operator" ] && continue
+            ROW="| ${operator} |"
+
+            for branch in "${BRANCH_ARRAY[@]}"; do
+              branch=$(echo "$branch" | xargs)
+              if echo "${BRANCH_OPERATORS[${branch}]}" | grep -qx "${operator}"; then
+                badge="[![build](https://github.com/${ORG_NAME}/${operator}/actions/workflows/build-${operator}.yaml/badge.svg?branch=${branch})](https://github.com/${ORG_NAME}/${operator}/actions/workflows/build-${operator}.yaml?query=branch%3A${branch})"
+                ROW="${ROW} ${badge} |"
+              else
+                ROW="${ROW} — |"
+              fi
+            done
+
+            ROWS="${ROWS}${ROW}
+"
+          done <<< "${ALL_OPERATORS}"
+
+          # Remove trailing newline from ROWS
+          ROWS=$(echo -n "${ROWS}" | sed '/^$/d')
+
+          # Write the file
+          cat > docs/image-build-status.md <<EOF
+# Post Merge Image Build Status
+
+${HEADER}
+${SEPARATOR}
+${ROWS}
+EOF
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet -- docs/image-build-status.md; then
+            echo "No changes detected"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changes detected"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff docs/image-build-status.md
+          fi
+
+      - name: Create PR
+        if: steps.changes.outputs.changed == 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+          PR_BRANCH="update-image-build-status-$(date +%s)"
+          git checkout -b "${PR_BRANCH}"
+          git add docs/image-build-status.md
+          git commit -m "Update image build status page"
+          git push origin "${PR_BRANCH}"
+
+          gh pr create \
+            --title "Update image build status page" \
+            --body "Auto-generated from active branches: ${{ inputs.branches }}" \
+            --base main \
+            --head "${PR_BRANCH}" \
+            --repo "${{ github.repository }}"

@@ -176,3 +176,10 @@ If images are missing, trigger the build workflow on the new branch.
 
 Update the integrity pipeline to pull data-plane-adoption repo content from
 the new FR branch (ci-framework-jobs repo on internal GitLab).
+
+### Image build status page
+
+Run the `Update image build status page` workflow in openstack-k8s-operators-ci
+with a comma-separated list of all active branches (e.g., `main,18-stable,18.0-fr6`).
+The workflow regenerates `docs/image-build-status.md` with per-branch build
+badges for all operators and creates a PR if changes are detected.

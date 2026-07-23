@@ -52,6 +52,12 @@ This is done once when development shifts to the next major version.
 **Manual prerequisite:**
 - Create `18-stable.json5` in the `renovate-config` repo before running the workflow. Copy from `default.json5` and adjust dependency bounds for the RHOSO 18 OCP target.
 
+**Post-workflow step:**
+- Run the "Update Renovate baseBranchPatterns" workflow to add the new stable
+  branch to `baseBranchPatterns` in `renovate.json` on `main` across all repos.
+  Example input: `main,18-stable`. This ensures Renovate discovers and creates
+  PRs for the new branch.
+
 See [Checklist](#checklist) and [Post-branching tasks](#post-branching-tasks-fr-branches).
 
 ### Scenario 2: Create feature branch for RHOSO 19 (from main)

@@ -1,0 +1,172 @@
+name: Update Renovate baseBranchPatterns
+
+on:
+  workflow_dispatch:
+    inputs:
+      BRANCHES:
+        description: 'Comma-separated list of branches Renovate should target (e.g. "main,18-stable"). main must always be included.'
+        required: true
+        type: string
+      DRY_RUN:
+        description: 'Show changes without creating PRs'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  update-renovate:
+    runs-on: ubuntu-latest
+    env:
+      ORG_NAME: ${{ github.repository_owner }}
+      REPO_LIST_FILE: 'feature_branch_repos.yaml'
+    steps:
+      - name: Generate a token from the GitHub App
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.app-token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate inputs
+        env:
+          BRANCHES: ${{ inputs.BRANCHES }}
+        run: |
+          set -eo pipefail
+
+          if ! echo "$BRANCHES" | grep -qw "main"; then
+            echo "::error::BRANCHES must include 'main'. Got: $BRANCHES"
+            exit 1
+          fi
+
+          echo "Branches to set: $BRANCHES"
+
+      - name: Update renovate.json in all repos
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCHES: ${{ inputs.BRANCHES }}
+          DRY_RUN: ${{ inputs.DRY_RUN }}
+        run: |
+          set -eo pipefail
+
+          git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+          # Build the JSON array for baseBranchPatterns
+          BRANCH_JSON=$(echo "$BRANCHES" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | jq -R . | jq -s .)
+          echo "baseBranchPatterns will be set to: $BRANCH_JSON"
+
+          # Read repo list
+          REPOS=$(yq e '.repos[].name' "$REPO_LIST_FILE")
+
+          SUCCEEDED=()
+          SKIPPED=()
+
+          PR_BRANCH="update-renovate-branches"
+
+          for repo in $REPOS; do
+            echo ""
+            echo "========================================="
+            echo "Processing: $repo"
+            echo "========================================="
+
+            # Check if renovate.json exists on main
+            if ! gh api "repos/${ORG_NAME}/${repo}/contents/renovate.json?ref=main" --jq '.content' > /dev/null 2>&1; then
+              echo "  SKIP: no renovate.json on main"
+              SKIPPED+=("$repo: no renovate.json")
+              continue
+            fi
+
+            # Fetch current renovate.json
+            CURRENT=$(gh api "repos/${ORG_NAME}/${repo}/contents/renovate.json?ref=main" --jq '.content' | base64 -d)
+            if [ -z "$CURRENT" ]; then
+              echo "  SKIP: empty renovate.json"
+              SKIPPED+=("$repo: empty renovate.json")
+              continue
+            fi
+
+            # Check if baseBranchPatterns already matches
+            CURRENT_BRANCHES=$(echo "$CURRENT" | jq -c '.baseBranchPatterns // []' 2>/dev/null)
+            if [ "$CURRENT_BRANCHES" = "$(echo "$BRANCH_JSON" | jq -c .)" ]; then
+              echo "  SKIP: baseBranchPatterns already up to date"
+              SKIPPED+=("$repo: already up to date")
+              continue
+            fi
+
+            # Update baseBranchPatterns and ensure useBaseBranchConfig is set
+            # Detect indent from current file (default 2 spaces)
+            INDENT=$(echo "$CURRENT" | grep -m1 '^ ' | sed 's/[^ ].*//' | wc -c)
+            INDENT=$((INDENT - 1))
+            if [ "$INDENT" -lt 1 ]; then INDENT=2; fi
+
+            UPDATED=$(echo "$CURRENT" | jq --argjson branches "$BRANCH_JSON" --indent "$INDENT" '
+              .baseBranchPatterns = $branches |
+              .useBaseBranchConfig = "merge"
+            ')
+
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "  DRY RUN: would update baseBranchPatterns to $BRANCH_JSON"
+              SUCCEEDED+=("$repo: would update (dry run)")
+              continue
+            fi
+
+            # Check if PR branch already exists
+            if gh api "repos/${ORG_NAME}/${repo}/git/ref/heads/${PR_BRANCH}" > /dev/null 2>&1; then
+              echo "  Deleting existing branch ${PR_BRANCH}"
+              gh api -X DELETE "repos/${ORG_NAME}/${repo}/git/ref/heads/${PR_BRANCH}" > /dev/null 2>&1 || true
+            fi
+
+            # Get main branch SHA
+            MAIN_SHA=$(gh api "repos/${ORG_NAME}/${repo}/git/ref/heads/main" --jq '.object.sha')
+
+            # Create branch
+            gh api "repos/${ORG_NAME}/${repo}/git/refs" \
+              -f "ref=refs/heads/${PR_BRANCH}" \
+              -f "sha=${MAIN_SHA}" > /dev/null
+
+            # Get current file SHA for the update
+            FILE_SHA=$(gh api "repos/${ORG_NAME}/${repo}/contents/renovate.json?ref=main" --jq '.sha')
+
+            # Update the file
+            CONTENT_B64=$(echo "$UPDATED" | base64 -w 0)
+            gh api -X PUT "repos/${ORG_NAME}/${repo}/contents/renovate.json" \
+              -f "message=Update Renovate baseBranchPatterns" \
+              -f "content=${CONTENT_B64}" \
+              -f "sha=${FILE_SHA}" \
+              -f "branch=${PR_BRANCH}" > /dev/null
+
+            # Create PR
+            PR_BODY="Update baseBranchPatterns in renovate.json to target branches: ${BRANCHES}."
+            PR_BODY="${PR_BODY}
+
+            This ensures Renovate creates dependency update PRs for all active branches."
+            PR_URL=$(gh pr create \
+              --repo "${ORG_NAME}/${repo}" \
+              --head "${PR_BRANCH}" \
+              --base main \
+              --title "Update Renovate baseBranchPatterns" \
+              --body "$PR_BODY" 2>&1)
+
+            echo "  OK: $PR_URL"
+            SUCCEEDED+=("$repo: $PR_URL")
+          done
+
+          echo ""
+          echo "========================================="
+          echo "SUMMARY"
+          echo "========================================="
+          echo ""
+          echo "Succeeded (${#SUCCEEDED[@]}):"
+          for s in "${SUCCEEDED[@]}"; do echo "  $s"; done
+          echo ""
+          echo "Skipped (${#SKIPPED[@]}):"
+          for s in "${SKIPPED[@]}"; do echo "  $s"; done

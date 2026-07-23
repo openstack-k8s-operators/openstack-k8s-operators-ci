@@ -103,12 +103,17 @@ jobs:
             fi
 
             # Update baseBranchPatterns and ensure useBaseBranchConfig is set
-            # Detect indent from current file (default 2 spaces)
-            INDENT=$(echo "$CURRENT" | grep -m1 '^ ' | sed 's/[^ ].*//' | wc -c)
-            INDENT=$((INDENT - 1))
-            if [ "$INDENT" -lt 1 ]; then INDENT=2; fi
+            # Detect indentation: tabs or spaces
+            if echo "$CURRENT" | grep -qm1 $'^\t'; then
+              JQ_INDENT_FLAG="--tab"
+            else
+              INDENT=$(echo "$CURRENT" | grep -m1 '^ ' | sed 's/[^ ].*//' | wc -c)
+              INDENT=$((INDENT - 1))
+              if [ "$INDENT" -lt 1 ]; then INDENT=2; fi
+              JQ_INDENT_FLAG="--indent $INDENT"
+            fi
 
-            UPDATED=$(echo "$CURRENT" | jq --argjson branches "$BRANCH_JSON" --indent "$INDENT" '
+            UPDATED=$(echo "$CURRENT" | jq --argjson branches "$BRANCH_JSON" $JQ_INDENT_FLAG '
               .baseBranchPatterns = $branches |
               .useBaseBranchConfig = "merge"
             ')
@@ -131,7 +136,7 @@ jobs:
             # Create branch
             gh api "repos/${ORG_NAME}/${repo}/git/refs" \
               -f "ref=refs/heads/${PR_BRANCH}" \
-              -f "sha=${MAIN_SHA}" > /dev/null
+              -f "sha=${MAIN_SHA}"
 
             # Get current file SHA for the update
             FILE_SHA=$(gh api "repos/${ORG_NAME}/${repo}/contents/renovate.json?ref=main" --jq '.sha')
@@ -142,7 +147,7 @@ jobs:
               -f "message=Update Renovate baseBranchPatterns" \
               -f "content=${CONTENT_B64}" \
               -f "sha=${FILE_SHA}" \
-              -f "branch=${PR_BRANCH}" > /dev/null
+              -f "branch=${PR_BRANCH}"
 
             # Create PR
             PR_BODY="Update baseBranchPatterns in renovate.json to target branches: ${BRANCHES}."
@@ -154,7 +159,7 @@ jobs:
               --head "${PR_BRANCH}" \
               --base main \
               --title "Update Renovate baseBranchPatterns" \
-              --body "$PR_BODY" 2>&1)
+              --body "$PR_BODY")
 
             echo "  OK: $PR_URL"
             SUCCEEDED+=("$repo: $PR_URL")

@@ -4,6 +4,10 @@
 
 [Post merge image build status](docs/image-build-status.md) for all operators across main, 18-stable, and 18.0-fr6 branches.
 
+## Dependency PR Dashboard
+
+[Dependency PR dashboard](docs/dependency-pr-dashboard.md) with search queries for tracking force-bump and Renovate PRs across all branches.
+
 ## Description
 Common scripts and tools for the openstack-k8s-operators CI that can be used inside or outside of any CI platform.
 

@@ -250,16 +250,19 @@ jobs:
 
     - name: Determine Version
       id: get_csv_version
+      env:
+        OPERATOR_VERSION: ${{ inputs.operator_version }}
+        OPERATOR_NAME: ${{ inputs.operator_name }}
       run: |
-        if [[ -n "${{ inputs.operator_version }}" ]]; then
-          echo "Using provided version: ${{ inputs.operator_version }}"
-          echo "version=${{ inputs.operator_version }}" >> $GITHUB_OUTPUT
-        elif [[ "${{ inputs.operator_name }}" == "openstack" ]]; then
+        if [[ -n "$OPERATOR_VERSION" ]]; then
+          echo "Using provided version: $OPERATOR_VERSION"
+          echo "version=$OPERATOR_VERSION" >> "$GITHUB_OUTPUT"
+        elif [[ "$OPERATOR_NAME" == "openstack" ]]; then
           echo "Operator is 'openstack', setting version to 0.4.0"
-          echo "version=0.4.0" >> $GITHUB_OUTPUT
+          echo "version=0.4.0" >> "$GITHUB_OUTPUT"
         else
           echo "Defaulting version to 0.0.1"
-          echo "version=0.0.1" >> $GITHUB_OUTPUT
+          echo "version=0.0.1" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Ensure crun compatibility with podman

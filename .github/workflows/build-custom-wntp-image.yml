@@ -29,48 +29,49 @@ jobs:
       BASE_IMAGE_URL: https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud-Base.latest.x86_64.qcow2
       BASE_IMAGE_FILE: Rocky-9-GenericCloud-Base.latest.x86_64.qcow2
 
-      # Define our custom output image name
-      CUSTOM_IMAGE_FILE: wntp-custom-${{ inputs.release_tag }}.qcow2
-
     steps:
-      - name: 1. Install Dependencies
+      - name: 1. Validate Inputs
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "::error::Invalid release_tag format: must be alphanumeric with dots, hyphens, underscores"
+            exit 1
+          fi
+          echo "CUSTOM_IMAGE_FILE=wntp-custom-${RELEASE_TAG}.qcow2" >> "$GITHUB_ENV"
+
+      - name: 2. Install Dependencies
         run: |
           echo "Installing libguestfs-tools (for virt-customize) and wget"
           sudo apt-get update
           sudo apt-get install -y libguestfs-tools wget
 
-      - name: 2. Download Base Rocky Linux Image
+      - name: 3. Download Base Rocky Linux Image
         run: |
-          echo "Downloading from ${{ env.BASE_IMAGE_URL }}"
-          wget -O ${{ env.BASE_IMAGE_FILE }} ${{ env.BASE_IMAGE_URL }}
+          echo "Downloading from $BASE_IMAGE_URL"
+          wget -O "$BASE_IMAGE_FILE" "$BASE_IMAGE_URL"
 
-      - name: 3. Customize Image
+      - name: 4. Customize Image
+        env:
+          CUSTOMIZE_ARGS: ${{ inputs.customize_args }}
         run: |
-          # Copy the downloaded image and give it our custom name
-          sudo cp ${{ env.BASE_IMAGE_FILE }} /tmp/${{ env.CUSTOM_IMAGE_FILE }}
+          sudo cp "$BASE_IMAGE_FILE" "/tmp/${CUSTOM_IMAGE_FILE}"
 
-          echo "Running virt-customize with args: ${{ inputs.customize_args }}"
+          echo "Running virt-customize with args: $CUSTOMIZE_ARGS"
 
           # virt-customize modifies the image file in-place
-          sudo LIBGUESTFS_BACKEND=direct virt-customize -a /tmp/${{ env.CUSTOM_IMAGE_FILE }} ${{ inputs.customize_args }}
+          sudo LIBGUESTFS_BACKEND=direct virt-customize -a "/tmp/${CUSTOM_IMAGE_FILE}" $CUSTOMIZE_ARGS
 
-          # Move the customized image back to the working directory
-          sudo mv /tmp/${{ env.CUSTOM_IMAGE_FILE }} ${{ env.CUSTOM_IMAGE_FILE }}
+          sudo mv "/tmp/${CUSTOM_IMAGE_FILE}" "$CUSTOM_IMAGE_FILE"
 
-          # Change ownership back to the runner user so the file can be read
           echo "Resetting file ownership..."
-          sudo chown $(whoami):$(whoami) ${{ env.CUSTOM_IMAGE_FILE }}
+          sudo chown "$(whoami):$(whoami)" "$CUSTOM_IMAGE_FILE"
 
-      - name: 4. Create GitHub Release and Upload Artifact
+      - name: 5. Create GitHub Release and Upload Artifact
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
-          # This is the tag you provided as input
           tag_name: ${{ inputs.release_tag }}
-
-          # Title for the release
           name: "Custom WNTP ${{ inputs.release_tag }} Image"
-
-          # Release description
           body: |
             Customized Rocky Linux 9 image for whitebox-neutron-tempest-plugin (WNTP) tests.
 
@@ -80,6 +81,4 @@ jobs:
             ```
             ${{ inputs.customize_args }}
             ```
-
-          # The file(s) to upload
           files: ${{ env.CUSTOM_IMAGE_FILE }}

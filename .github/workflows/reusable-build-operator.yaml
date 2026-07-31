@@ -262,6 +262,21 @@ jobs:
           echo "version=0.0.1" >> $GITHUB_OUTPUT
         fi
 
+    - name: Ensure crun compatibility with podman
+      shell: bash
+      run: |
+        # Podman 5.8+ generates OCI runtime spec 1.2.x, but crun < 1.14.3
+        # rejects it with "unknown version specified".
+        if ! crun --version 2>/dev/null | grep -qE 'crun version 1\.(1[4-9]|[2-9][0-9])'; then
+          echo "crun too old or missing — installing crun 1.28"
+          sudo curl -fsSL -o /usr/bin/crun \
+            https://github.com/containers/crun/releases/download/1.28/crun-1.28-linux-amd64
+          sudo chmod +x /usr/bin/crun
+        else
+          echo "crun version is sufficient"
+        fi
+        crun --version
+
     - name: Create index image
       shell: bash
       run: |

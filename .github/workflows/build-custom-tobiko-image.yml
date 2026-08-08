@@ -55,7 +55,7 @@ jobs:
           echo "CUSTOM_IMAGE_FILE=tobiko-custom-${RELEASE_TAG}.qcow2" >> "$GITHUB_ENV"
 
       - name: 2. Checkout Repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: 3. Prepare Config Files
         run: |
@@ -104,7 +104,7 @@ jobs:
           sudo chown "$(whoami):$(whoami)" "$CUSTOM_IMAGE_FILE"
 
       - name: 8. Create GitHub Release and Upload Artifact
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ inputs.release_tag }}
           name: "Custom Tobiko ${{ inputs.release_tag }} Image"

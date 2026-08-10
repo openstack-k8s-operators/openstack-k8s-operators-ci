@@ -99,9 +99,8 @@ jobs:
       run: |
         DIGEST=$(cat digest.txt | sed -e 's|sha256:||')
         echo "OPERATOR_IMAGE_DIGEST=$DIGEST" >> $GITHUB_ENV
-        podman tag "localhost/${IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${IMAGE}:${DIGEST}"
+        podman tag "localhost/${IMAGE}:${GITHUB_SHA}" "localhost/${IMAGE}:${DIGEST}"
       env:
-        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
         IMAGE: ${{ inputs.operator_name }}-operator
         GITHUB_SHA: ${{ github.sha }}
 
@@ -190,9 +189,8 @@ jobs:
       run: |
         DIGEST=$(cat digest.txt | sed -e 's|sha256:||')
         echo "OPERATOR_BUNDLE_IMAGE_DIGEST=$DIGEST" >> $GITHUB_ENV
-        podman tag "localhost/${IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${IMAGE}:${DIGEST}"
+        podman tag "localhost/${IMAGE}:${GITHUB_SHA}" "localhost/${IMAGE}:${DIGEST}"
       env:
-        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
         IMAGE: ${{ inputs.operator_name }}-operator-bundle
         GITHUB_SHA: ${{ github.sha }}
 
@@ -299,8 +297,8 @@ jobs:
         EOF_CAT
         cat catalog/index.yaml
         opm validate catalog
-        podman build -t "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" -f catalog.Dockerfile
-        podman tag "${REGISTRY}/${INDEX_IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${INDEX_IMAGE}:${INDEX_IMAGE_TAG}"
+        podman build -t "localhost/${INDEX_IMAGE}:${GITHUB_SHA}" -f catalog.Dockerfile
+        podman tag "localhost/${INDEX_IMAGE}:${GITHUB_SHA}" "localhost/${INDEX_IMAGE}:${INDEX_IMAGE_TAG}"
         popd
       env:
         REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
@@ -330,9 +328,8 @@ jobs:
       run: |
         DIGEST=$(cat digest.txt | sed -e 's|sha256:||')
         echo "OPERATOR_INDEX_IMAGE_DIGEST=$DIGEST" >> $GITHUB_ENV
-        podman tag "${REGISTRY}/${IMAGE}:${GITHUB_SHA}" "${REGISTRY}/${IMAGE}:${DIGEST}"
+        podman tag "localhost/${IMAGE}:${GITHUB_SHA}" "localhost/${IMAGE}:${DIGEST}"
       env:
-        REGISTRY:  ${{ env.imageregistry }}/${{ env.imagenamespace }}
         IMAGE: ${{ inputs.operator_name }}-operator-index
         GITHUB_SHA: ${{ github.sha }}
 

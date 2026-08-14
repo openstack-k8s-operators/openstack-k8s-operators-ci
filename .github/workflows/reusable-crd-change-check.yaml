@@ -1,0 +1,66 @@
+# Reusable workflow to detect CRD changes on maintenance branches (18.0-frX).
+# CRDs should be frozen after the initial branch creation. If a CRD change is
+# intentional, use /override in the PR to let Tide proceed.
+#
+# Example caller workflow in an operator repo:
+#
+#   name: CRD change check
+#   on:
+#     pull_request:
+#       branches:
+#         - '18.0-fr[0-9]*'
+#   jobs:
+#     crd-change-check:
+#       uses: openstack-k8s-operators/openstack-k8s-operators-ci/.github/workflows/reusable-crd-change-check.yaml@main
+
+name: CRD change check for maintenance branches
+
+on:
+  workflow_call:
+    inputs:
+      crd_path:
+        description: 'Path to the CRD bases directory to check for changes'
+        required: false
+        type: string
+        default: 'config/crd/bases'
+
+jobs:
+  crd-change-check:
+    name: Check for CRD changes since branch creation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        fetch-depth: 0
+
+    - name: Check for CRD changes in PR
+      env:
+        CRD_PATH: ${{ inputs.crd_path }}
+      run: |
+        set -euxo pipefail
+
+        if [ ! -d "${CRD_PATH}" ]; then
+          echo "CRD path '${CRD_PATH}' does not exist — skipping check."
+          exit 0
+        fi
+
+        BASE_SHA="${{ github.event.pull_request.base.sha }}"
+        echo "PR base: ${BASE_SHA}"
+        echo "PR head: ${{ github.event.pull_request.head.sha }}"
+
+        CRD_CHANGES=$(git diff --name-only "${BASE_SHA}"..HEAD -- "${CRD_PATH}")
+
+        if [ -z "${CRD_CHANGES}" ]; then
+          echo "No CRD changes in this PR."
+          exit 0
+        fi
+
+        echo "::error::This PR introduces CRD changes on a maintenance branch."
+        echo "::error::CRD changes are not allowed on maintenance branches. Use /override if this change is intentional."
+        echo ""
+        echo "Changed CRD files:"
+        echo "${CRD_CHANGES}"
+        echo ""
+        echo "Diff:"
+        git diff "${BASE_SHA}"..HEAD -- "${CRD_PATH}"
+        exit 1

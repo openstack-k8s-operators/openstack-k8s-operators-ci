@@ -29,6 +29,7 @@ Common scripts and tools for the openstack-k8s-operators CI that can be used ins
 | Workflow | Trigger | Description |
 |----------|---------|-------------|
 | [Operator image builder](.github/workflows/reusable-build-operator.yaml) | `workflow_call` | Builds and pushes operator container images. |
+| [CRD change check](.github/workflows/reusable-crd-change-check.yaml) | `workflow_call` | Fails PRs that introduce CRD changes on maintenance branches (`18.0-frX`). Use `/override` in Tide when a change is intentional. |
 | [Golang lint, vet and unit test](.github/workflows/golangci-lint.yaml) | `workflow_call` | Go linting, vetting, and unit test pipeline. |
 | [Add Label to PR](.github/workflows/label-pr.yaml) | `workflow_call` | Adds labels to pull requests. |
 

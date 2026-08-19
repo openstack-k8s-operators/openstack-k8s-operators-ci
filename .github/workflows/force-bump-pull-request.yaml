@@ -50,11 +50,50 @@ jobs:
         GOTOOLCHAIN: local
       run: |
         cd $GITHUB_WORKSPACE
+
+        # go.sum verification against sum.golang.org, and module downloads
+        # from the proxy, transiently return a 500 right after a new
+        # module version is pushed, before it's cached upstream.
+        # force-bump issues one `go get` per openstack-k8s-operators
+        # dependency (openstack-operator alone bumps 15+ service
+        # operators), so retrying the whole make target as a unit would
+        # need an unbounded retry budget to ride out one flaky call per
+        # dependency. Shim the `go` binary instead, so every individual
+        # invocation gets its own retry budget.
+        GO_RETRY_WRAPPER_DIR="$(mktemp -d)"
+        export REAL_GO="$(command -v go)"
+        cat > "$GO_RETRY_WRAPPER_DIR/go" <<'WRAPPER'
+        #!/usr/bin/env bash
+        n=0
+        max=5
+        delay=10
+        "$REAL_GO" "$@"; rc=$?
+        while [ "$rc" -ne 0 ] && [ "$n" -lt "$max" ]; do
+          n=$((n+1))
+          if [ "$n" -ge "$max" ]; then
+            echo "::error::go $* failed after $max attempts" >&2
+            exit "$rc"
+          fi
+          echo "go $* failed (attempt $n/$max), retrying in ${delay}s..." >&2
+          sleep "$delay"
+          "$REAL_GO" "$@"; rc=$?
+        done
+        exit "$rc"
+        WRAPPER
+        chmod +x "$GO_RETRY_WRAPPER_DIR/go"
+        ORIG_PATH="$PATH"
+        export PATH="$GO_RETRY_WRAPPER_DIR:$PATH"
+
         go work init
         make gowork
         BRANCH='${{ inputs.branch_name }}' make force-bump
         go work sync
         make tidy
+
+        # Codegen/build steps from here on shouldn't hit the network; run
+        # them against the real go so genuine failures surface immediately
+        # instead of being retried behind sum.golang.org's retry budget.
+        export PATH="$ORIG_PATH"
         make manifests generate
 
     - name: run make bindata

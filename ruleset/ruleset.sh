@@ -1,13 +1,26 @@
 #!/bin/bash
 #
-# ruleset.sh - Create a GitHub branch protection ruleset via the GitHub API.
+# ruleset.sh - Create or update a GitHub branch protection ruleset.
 #
-# Creates a repository ruleset named "Minimum required Branch Protection"
-# that protects the "main" and "18.0-fr*" branches by:
+# Creates (or updates) a repository ruleset named
+# "Minimum required Branch Protection" that protects the "main" and
+# "18.0-fr*" branches by:
 #   - blocking branch deletion
 #   - blocking non-fast-forward pushes
-#   - requiring a pull request with at least 1 approving review and
-#     code owner review before merging
+#   - requiring a pull request before merging
+#
+# GitHub review approvals and CODEOWNERS reviews are intentionally not
+# required. Merge gating for openstack-k8s-operators repos is handled by
+# Prow Tide via the `approved` and `lgtm` labels (from `/approve` and
+# `/lgtm`, plus OWNERS files). Tide merges through the GitHub API and
+# does not submit a native GitHub "Approve" review.
+#
+# A ruleset with required_approving_review_count >= 1 causes Tide to
+# fail with:
+#   PR is unmergable. Do the Tide merge requirements match the GitHub
+#   settings for the repo? Repository rule violations found
+#   At least 1 approving review is required by reviewers with write
+#   access.
 #
 # Prerequisites:
 #   - GitHub CLI (`gh`) installed: https://cli.github.com/
@@ -15,8 +28,9 @@
 #     (repo admin), e.g. `gh auth login`
 #   - Run from within a local clone of the target repository, so `gh`
 #     can resolve the `:owner/:repo` placeholders in the API path.
-#     Alternatively, edit the script to hardcode `/repos/<owner>/<repo>/rulesets`
-#     to target a specific repo regardless of the current directory.
+#     Alternatively, edit the script to hardcode
+#     `/repos/<owner>/<repo>/rulesets` to target a specific repo
+#     regardless of the current directory.
 #
 # How to use:
 #   1. cd into a local clone of the target repository, with its "origin"
@@ -35,15 +49,18 @@
 # from inside the target repo's clone (not from this ruleset/ directory,
 # unless that happens to be the repo you want to protect).
 #
+# If a ruleset with this name already exists, it is updated in place
+# (PUT) instead of created (POST).
+#
 # To target different branches or rules, edit the JSON payload below
 # (see the GitHub REST API docs for repository rulesets).
 
-gh api \
-  --method POST \
-  -H "Accept: application/vnd.github+json" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  /repos/:owner/:repo/rulesets \
-  --input - <<< '{
+set -euo pipefail
+
+RULESET_NAME="Minimum required Branch Protection"
+
+PAYLOAD=$(cat <<'EOF'
+{
   "name": "Minimum required Branch Protection",
   "target": "branch",
   "enforcement": "active",
@@ -67,12 +84,38 @@ gh api \
     {
       "type": "pull_request",
       "parameters": {
-        "required_approving_review_count": 1,
+        "required_approving_review_count": 0,
         "dismiss_stale_reviews_on_push": false,
-        "require_code_owner_review": true,
+        "require_code_owner_review": false,
         "require_last_push_approval": false,
         "required_review_thread_resolution": false
       }
     }
   ]
-}'
+}
+EOF
+)
+
+RULESET_ID=$(gh api \
+  -H "Accept: application/vnd.github+json" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  /repos/:owner/:repo/rulesets \
+  --jq ".[] | select(.name==\"${RULESET_NAME}\") | .id" | head -n1)
+
+if [ -n "${RULESET_ID}" ]; then
+    echo "Updating existing ruleset id=${RULESET_ID}" >&2
+    gh api \
+      --method PUT \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "/repos/:owner/:repo/rulesets/${RULESET_ID}" \
+      --input - <<< "${PAYLOAD}"
+else
+    echo "Creating ruleset" >&2
+    gh api \
+      --method POST \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      /repos/:owner/:repo/rulesets \
+      --input - <<< "${PAYLOAD}"
+fi

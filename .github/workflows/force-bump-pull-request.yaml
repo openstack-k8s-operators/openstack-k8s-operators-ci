@@ -16,11 +16,17 @@ on:
       FORCE_BUMP_PULL_REQUEST_PAT:
         required: false
 
+permissions:
+  contents: read
+
 jobs:
 
   force-bump-pr:
     name: Generate a pull request update to the latest openstack-k8s-operators dependencies for the selected operator
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     container:
       image: ${{ inputs.custom_image }}
       options: --user root

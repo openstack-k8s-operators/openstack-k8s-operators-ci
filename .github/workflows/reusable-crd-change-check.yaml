@@ -1,6 +1,7 @@
 # Reusable workflow to detect CRD changes on maintenance branches (18.0-frX).
-# CRDs should be frozen after the initial branch creation. If a CRD change is
-# intentional, use /override in the PR to let Tide proceed.
+# CRDs should be frozen after the initial branch creation. Changes limited to
+# field `description` values are allowed. Any other structural change requires
+# /override in the PR to let Tide proceed.
 #
 # Example caller workflow in an operator repo:
 #
@@ -36,6 +37,7 @@ jobs:
     - name: Check for CRD changes in PR
       env:
         CRD_PATH: ${{ inputs.crd_path }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euxo pipefail
 
@@ -44,7 +46,6 @@ jobs:
           exit 0
         fi
 
-        BASE_SHA="${{ github.event.pull_request.base.sha }}"
         echo "PR base: ${BASE_SHA}"
         echo "PR head: ${{ github.event.pull_request.head.sha }}"
 
@@ -55,12 +56,99 @@ jobs:
           exit 0
         fi
 
-        echo "::error::This PR introduces CRD changes on a maintenance branch."
-        echo "::error::CRD changes are not allowed on maintenance branches. Use /override if this change is intentional."
-        echo ""
-        echo "Changed CRD files:"
+        echo "CRD files changed:"
         echo "${CRD_CHANGES}"
-        echo ""
-        echo "Diff:"
-        git diff "${BASE_SHA}"..HEAD -- "${CRD_PATH}"
-        exit 1
+
+        python3 -c "import yaml" 2>/dev/null \
+            || pip3 install --quiet pyyaml
+
+        export CRD_CHANGES
+        python3 << 'PYEOF'
+        import os, subprocess, sys, yaml, json
+
+        base_sha = os.environ['BASE_SHA']
+        crd_changes = os.environ['CRD_CHANGES'].splitlines()
+
+
+        def strip_desc(obj):
+            """Recursively remove 'description' keys."""
+            if isinstance(obj, dict):
+                return {k: strip_desc(v) for k, v in obj.items()
+                        if k != 'description'}
+            elif isinstance(obj, list):
+                return [strip_desc(i) for i in obj]
+            return obj
+
+
+        def normalize(obj):
+            """Strip descriptions only under openAPIV3Schema."""
+            if isinstance(obj, dict):
+                return {k: (strip_desc(v) if k == 'openAPIV3Schema'
+                            else normalize(v))
+                        for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [normalize(i) for i in obj]
+            return obj
+
+
+        failed = False
+        for f in crd_changes:
+            try:
+                base_raw = subprocess.check_output(
+                    ['git', 'show', f'{base_sha}:{f}'],
+                    stderr=subprocess.PIPE
+                ).decode()
+            except subprocess.CalledProcessError:
+                print(f'::error::New CRD file added: {f}')
+                print('::error::Not allowed on maintenance branch.')
+                failed = True
+                continue
+
+            try:
+                head_raw = subprocess.check_output(
+                    ['git', 'show', f'HEAD:{f}'],
+                    stderr=subprocess.PIPE
+                ).decode()
+            except subprocess.CalledProcessError:
+                print(f'::error::CRD file deleted: {f}')
+                print('::error::Not allowed on maintenance branch.')
+                failed = True
+                continue
+
+            try:
+                base_doc = yaml.safe_load(base_raw)
+                head_doc = yaml.safe_load(head_raw)
+            except yaml.YAMLError as e:
+                print(f'::error::Failed to parse {f}: {e}')
+                failed = True
+                continue
+
+            base_norm = json.dumps(
+                normalize(base_doc), sort_keys=True
+            )
+            head_norm = json.dumps(
+                normalize(head_doc), sort_keys=True
+            )
+
+            if base_norm != head_norm:
+                print(f'::error::Non-description CRD changes in {f}')
+                failed = True
+            else:
+                print(f'OK: {f} — only description changes')
+
+        if failed:
+            print('')
+            print('::error::CRD changes beyond field descriptions')
+            print('::error::are not allowed on maintenance branches.')
+            print('::error::Use /override if this change is intentional.')
+            print('')
+            print('Full diff:')
+            for f in crd_changes:
+                subprocess.run(
+                    ['git', 'diff', f'{base_sha}..HEAD', '--', f]
+                )
+            sys.exit(1)
+        else:
+            print('All CRD changes are description-only. Allowing.')
+            sys.exit(0)
+        PYEOF

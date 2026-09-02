@@ -48,9 +48,14 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
   create-branches:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       # Use current org as the ORG_NAME
       ORG_NAME: ${{ github.repository_owner }}

@@ -44,6 +44,9 @@ env:
   imagenamespace: ${{ secrets.IMAGENAMESPACE || secrets.QUAY_USERNAME }}
   latesttag: latest
 
+permissions:
+  contents: read
+
 jobs:
 
   check-secrets:

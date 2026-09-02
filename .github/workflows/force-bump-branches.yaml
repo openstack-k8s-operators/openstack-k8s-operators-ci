@@ -11,8 +11,15 @@ on:
     secrets:
       FORCE_BUMP_PULL_REQUEST_PAT:
         required: false
+
+permissions:
+  contents: read
+
 jobs:
   trigger-jobs:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: openstack-k8s-operators/openstack-k8s-operators-ci/.github/workflows/force-bump-pull-request.yaml@main
     strategy:
       matrix:

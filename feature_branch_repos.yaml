@@ -8,7 +8,6 @@
 #     skip_makefile_changes: true
 
 repos:
-  - name: architecture
   - name: barbican-operator
   - name: ci-framework
   - name: cinder-operator

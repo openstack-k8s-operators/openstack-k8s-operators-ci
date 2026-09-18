@@ -29,9 +29,6 @@ RUN dnf update -y && \
         file \
         && dnf clean all
 
-# Replace curl-minimal with full curl in separate step
-RUN dnf swap -y curl-minimal curl
-
 # Create workspace and bin directory
 RUN mkdir -p ${LOCALBIN}
 

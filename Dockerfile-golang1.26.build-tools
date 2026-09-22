@@ -7,7 +7,8 @@ ENV GOTOOLCHAIN_VERSION=go1.26.4
 ENV OC_VERSION=4.16.0
 ENV OPERATOR_SDK_VERSION=v1.42.3
 ENV GOLANGCI_LINT_VERSION=v2.12.2
-ENV OPM_VERSION=v1.29.0
+# opm v2.0 will drop sqlite support
+ENV OPM_VERSION=v1.74.0
 
 # Set workspace and bin directory
 ENV WORKSPACE_DIR=/tmp/workspace

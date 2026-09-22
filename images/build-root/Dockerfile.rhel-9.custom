@@ -3,6 +3,8 @@ FROM ${GOLANG_BASE}
 ARG SDK_VERSION=v1.31.0
 ARG KUSTOMIZE_VERSION=v5.0.3
 ARG YQ_VERSION=v4.44.5
+# keep on v1.x: opm v2.0 drops the sqlite index support the operator index build relies on
+ARG OPM_VERSION=v1.74.0
 USER root
 RUN yum install -y gcc git jq make python python-pip skopeo && yum clean all && rm -rf /var/cache/dnf/*
 RUN curl -s -L "https://github.com/operator-framework/operator-sdk/releases/download/${SDK_VERSION}/operator-sdk_linux_amd64" -o operator-sdk
@@ -16,3 +18,7 @@ RUN /usr/local/bin/kustomize version
 RUN curl -s -L https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64 -o /usr/local/bin/yq
 RUN chmod +x /usr/local/bin/yq
 RUN /usr/local/bin/yq --version
+
+RUN curl -s -L https://github.com/operator-framework/operator-registry/releases/download/${OPM_VERSION}/linux-amd64-opm -o /usr/local/bin/opm
+RUN chmod +x /usr/local/bin/opm
+RUN /usr/local/bin/opm version

@@ -1,12 +1,15 @@
 # Reusable workflow to detect CRD changes on maintenance branches (18.0-frX).
 # CRDs should be frozen after the initial branch creation. If a CRD change is
-# intentional, use /override in the PR to let Tide proceed.
+# intentional, add the override label (default: "crd-override") to the PR to
+# skip this check. The caller workflow must include the "labeled" event type
+# below so the check re-runs automatically when the label is added.
 #
 # Example caller workflow in an operator repo:
 #
 #   name: CRD change check
 #   on:
 #     pull_request:
+#       types: [opened, synchronize, reopened, labeled, unlabeled]
 #       branches:
 #         - '18.0-fr[0-9]*'
 #   jobs:
@@ -23,11 +26,17 @@ on:
         required: false
         type: string
         default: 'config/crd/bases'
+      override_label:
+        description: 'PR label that skips this check when an intentional CRD change is needed'
+        required: false
+        type: string
+        default: 'crd-override'
 
 jobs:
   crd-change-check:
     name: Check for CRD changes since branch creation
     runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, inputs.override_label) }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:
@@ -36,6 +45,7 @@ jobs:
     - name: Check for CRD changes in PR
       env:
         CRD_PATH: ${{ inputs.crd_path }}
+        OVERRIDE_LABEL: ${{ inputs.override_label }}
       run: |
         set -euxo pipefail
 
@@ -56,7 +66,7 @@ jobs:
         fi
 
         echo "::error::This PR introduces CRD changes on a maintenance branch."
-        echo "::error::CRD changes are not allowed on maintenance branches. Use /override if this change is intentional."
+        echo "::error::CRD changes are not allowed on maintenance branches. Add the '${OVERRIDE_LABEL}' label if this change is intentional."
         echo ""
         echo "Changed CRD files:"
         echo "${CRD_CHANGES}"

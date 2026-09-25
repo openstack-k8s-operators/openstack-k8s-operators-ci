@@ -19,7 +19,7 @@ on:
         required: true
         type: string
       FORCE_BUMP_BRANCHES:
-        description: 'All active branches for the force-bump workflow, e.g. ["main", "18-stable", "18.0-fr6"].'
+        description: 'All active branches for the force-bump workflow, e.g. ["main", "18-stable", "18.0-fr7"].'
         required: true
         type: string
       DRY_RUN:

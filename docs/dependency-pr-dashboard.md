@@ -19,7 +19,7 @@ dependencies (lib-common, service operator APIs). These are authored by
 |--------|-------|
 | main | [main](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fgithub-actions+head%3Aopenstack-dependency-bump%2Fmain) |
 | 18-stable | [18-stable](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fgithub-actions+head%3Aopenstack-dependency-bump%2F18-stable) |
-| 18.0-fr6 | [18.0-fr6](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fgithub-actions+head%3Aopenstack-dependency-bump%2F18.0-fr6) |
+| 18.0-fr7 | [18.0-fr7](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fgithub-actions+head%3Aopenstack-dependency-bump%2F18.0-fr7) |
 
 ### Including merged/closed
 
@@ -41,7 +41,7 @@ GitHub App) on branches prefixed with `renovate/`.
 |--------|-------|
 | main | [main](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fospk8s-renovate+head%3Arenovate%2Fmain) |
 | 18-stable | [18-stable](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fospk8s-renovate+head%3Arenovate%2F18-stable) |
-| 18.0-fr6 | [18.0-fr6](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fospk8s-renovate+head%3Arenovate%2F18.0-fr6) |
+| 18.0-fr7 | [18.0-fr7](https://github.com/pulls?q=is%3Apr+is%3Aopen+org%3Aopenstack-k8s-operators+author%3Aapp%2Fospk8s-renovate+head%3Arenovate%2F18.0-fr7) |
 
 ### Including merged/closed
 

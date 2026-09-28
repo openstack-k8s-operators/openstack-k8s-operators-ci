@@ -189,3 +189,10 @@ Run the `Update image build status page` workflow in openstack-k8s-operators-ci
 with a comma-separated list of all active branches (e.g., `main,18-stable,18.0-fr6`).
 The workflow regenerates `docs/image-build-status.md` with per-branch build
 badges for all operators and creates a PR if changes are detected.
+
+### Dependency PR dashboard
+
+Update the per-branch tables in `docs/dependency-pr-dashboard.md` to add the new
+FR branch and remove FR branches that are no longer active. This keeps the
+force-bump and Renovate PR links aligned with the active branches. Example:
+[PR #223](https://github.com/openstack-k8s-operators/openstack-k8s-operators-ci/pull/223).

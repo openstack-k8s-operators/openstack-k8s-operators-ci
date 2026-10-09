@@ -70,7 +70,27 @@ EOF_CAT
  openstack-k8s-operators/openstack-baremetal-operator \
  openstack-k8s-operators/horizon-operator \
  openstack-k8s-operators/octavia-operator \
- openstack-k8s-operators/neutron-operator \
+ openstack-k8s-operators/neutron-operator 2>&1 | tee $log_file
+
+ # Generate a GitHub App installation token (expires after 1 hour)
+ RENOVATE_GITHUB_APP_TOKEN=$(podman run --rm \
+   -v "${RENOVATE_GITHUB_APP_KEY}:/key.pem:ro,Z" \
+   ghcr.io/mshekow/github-app-installation-token:latest \
+   "${RENOVATE_GITHUB_APP_ID}" \
+   "${RENOVATE_GITHUB_INSTALLATION_ID}" \
+   "/key.pem") || { echo "ERROR: Failed to generate GitHub App token"; continue; }
+
+ if [ -z "${RENOVATE_GITHUB_APP_TOKEN}" ]; then
+   echo "ERROR: GitHub App token is empty"
+   continue
+ fi
+
+ echo "Running Renovate..."
+ podman run -e RENOVATE_TOKEN="${RENOVATE_GITHUB_APP_TOKEN}" -e BINDATA_GIT_ADD=true -e LOG_LEVEL=debug --rm \
+ localhost/renovate:local \
+ --git-author="ospk8s-renovate[bot] <296544045+ospk8s-renovate[bot]@users.noreply.github.com>" \
+ --update-not-scheduled=false \
+ --allowed-post-upgrade-commands="^make manifests generate,^make bindata,^make gowork,^go mod tidy,^make tidy,^make force-bump,^git reset" \
  openstack-k8s-operators/ovn-operator \
  openstack-k8s-operators/heat-operator \
  openstack-k8s-operators/telemetry-operator \
@@ -84,7 +104,7 @@ EOF_CAT
  openstack-k8s-operators/architecture \
  openstack-k8s-operators/s2i-openstack-containers \
  openstack-k8s-operators/lightspeed-operator \
- openstack-k8s-operators/edpm-ansible 2>&1 | tee $log_file
+ openstack-k8s-operators/edpm-ansible 2>&1 | tee -a $log_file
 
  echo "sleeping 60 minutes..."
  sleep 3600

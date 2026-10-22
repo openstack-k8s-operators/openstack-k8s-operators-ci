@@ -132,7 +132,7 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
     - name: Install operator-sdk
-      uses: redhat-actions/openshift-tools-installer@37eb3cfb20ac2df6f0511ffa71cd917e4d49cabf # v3
+      uses: redhat-actions/openshift-tools-installer@1f130822bb0930e0ee02a119adcc3271a22b1499 # v3
       with:
         source: github
         operator-sdk: ${{ inputs.operator_sdk_version }}
@@ -230,7 +230,7 @@ jobs:
         echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Install opm
-      uses: redhat-actions/openshift-tools-installer@37eb3cfb20ac2df6f0511ffa71cd917e4d49cabf # v3
+      uses: redhat-actions/openshift-tools-installer@1f130822bb0930e0ee02a119adcc3271a22b1499 # v3
       with:
         source: github
         opm: 'latest'

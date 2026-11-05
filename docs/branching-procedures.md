@@ -168,6 +168,8 @@ Script added via https://github.com/openstack-k8s-operators/openstack-k8s-operat
 Add the new branch to the Zuul default branches config.
 Example: https://gitlab.com/softwarefactory-project/config/-/merge_requests/118
 
+Ping eod-pcinfra in #rhos-prodchain-discuss on slack for a review and get it merged.
+
 ### Validate container images
 
 Verify that the following images exist in quay with the new FR branch tag

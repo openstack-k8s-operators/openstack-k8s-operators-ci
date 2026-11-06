@@ -149,19 +149,28 @@ After running the workflow:
 - [ ] Merge the openstack-k8s-operators-ci force-bump PR
 - [ ] Run a test force-bump to verify the new branch is included
 
-## Post-branching tasks (FR branches)
+## Post-branching tasks (feature branches)
+
+These branch-specific tasks also apply to beta feature branches unless the
+release team explicitly excludes a task. For repos that have a `19.0-beta`
+branch, use the same Prow job subset configured for `18-stable`.
 
 ### Prow CI jobs (openshift/release)
 
-Prow job configs need to be updated for the new FR branch — jobs expect the
+Prow job configs need to be updated for the new feature branch — jobs expect the
 branch to be part of the job config file name.
 
-Use the helper script to create the openshift/release PR:
+Use the copy helper to create the openshift/release PR. Its template-branch
+argument selects only the Prow job definitions to copy; it does not describe
+branch ancestry or an upgrade path. Exclude repos that do not have the target
+branch. For `19.0-beta`, `architecture` and `repo-setup` have no such branch,
+so exclude them while preserving the `18-stable` configs:
 ```bash
-./switch_prow_jobs_fr_branch.sh <old-fr> <new-fr>
-# e.g. ./switch_prow_jobs_fr_branch.sh fr6 fr7
+./add_prow_jobs_feature_branch.sh --template-branch 18-stable --target-branch 19.0-beta \
+  --exclude-repo architecture --exclude-repo repo-setup
 ```
-Script added via https://github.com/openstack-k8s-operators/openstack-k8s-operators-ci/pull/139
+The existing `switch_prow_jobs_fr_branch.sh` helper is for replacing one FR
+branch with another and should not be used when both branches remain active.
 
 ### Zuul
 
@@ -172,8 +181,8 @@ Ping eod-pcinfra in #rhos-prodchain-discuss on slack for a review and get it mer
 
 ### Validate container images
 
-Verify that the following images exist in quay with the new FR branch tag
-(e.g. `18.0-fr7-latest`):
+Verify that the following images exist in quay with the new branch tag
+(e.g. `19.0-beta-latest`):
 - https://quay.io/repository/openstack-k8s-operators/openstack-baremetal-operator-agent?tab=tags
 - https://quay.io/repository/openstack-k8s-operators/openstack-ansibleee-runner?tab=tags
 - https://quay.io/repository/openstack-k8s-operators/openstack-must-gather?tab=tags
@@ -182,15 +191,18 @@ If images are missing, trigger the build workflow on the new branch.
 
 ### Integrity pipeline
 
-Update the integrity pipeline to pull data-plane-adoption repo content from
-the new FR branch (ci-framework-jobs repo on internal GitLab).
+For upgradeable feature-release branches, update the integrity pipeline to pull
+data-plane-adoption repo content from the new branch (ci-framework-jobs repo on
+internal GitLab). Skip this task for beta branches that users cannot upgrade
+to or from, such as `19.0-beta`.
 
 ### Image build status page
 
 Run the `Update image build status page` workflow in openstack-k8s-operators-ci
-with a comma-separated list of all active branches (e.g., `main,18-stable,18.0-fr6`).
+with a comma-separated list of all active branches.
 The workflow regenerates `docs/image-build-status.md` with per-branch build
-badges for all operators and creates a PR if changes are detected.
+badges for all operators and creates a PR if changes are detected. For the
+current branch set, use `main,18-stable,18.0-fr7,19.0-beta`.
 
 ### Dependency PR dashboard
 

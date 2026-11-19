@@ -177,8 +177,24 @@ Verify that the following images exist in quay with the new FR branch tag
 - https://quay.io/repository/openstack-k8s-operators/openstack-baremetal-operator-agent?tab=tags
 - https://quay.io/repository/openstack-k8s-operators/openstack-ansibleee-runner?tab=tags
 - https://quay.io/repository/openstack-k8s-operators/openstack-must-gather?tab=tags
+- https://quay.io/repository/openstack-k8s-operators/mysqld_exporter?tab=tags
+- https://quay.io/repository/openstack-k8s-operators/sg-core?tab=tags
+- https://quay.io/repository/openstack-k8s-operators/prometheus-podman-exporter?tab=tags
 
 If images are missing, trigger the build workflow on the new branch.
+
+Verify that `config/operator/default_images.yaml` in openstack-operator on the
+new branch references all of the above images with the new branch tag:
+
+```bash
+BRANCH=18.0-fr7
+gh api "repos/openstack-k8s-operators/openstack-operator/contents/config/operator/default_images.yaml?ref=${BRANCH}" \
+  --jq .content | base64 -d | grep -o 'quay.io/openstack-k8s-operators/[^ ]*'
+```
+
+All of the images listed above must end in `:${BRANCH}-latest`
+(`openstack-network-exporter` stays on `:current-podified`). If not, open a PR
+on the new branch to fix it.
 
 ### Integrity pipeline
 

@@ -457,15 +457,12 @@ jobs:
               if [ -f "${DEFAULT_IMAGES_FILE}" ]; then
                 echo "Updating ${DEFAULT_IMAGES_FILE} for release branch ${BRANCH_NAME}..."
                 # Update specific images to use the release branch tag
-                if ! sed -i -E "s|(quay\.io/openstack-k8s-operators/openstack-ansibleee-runner):latest|\1:${BRANCH_NAME}-latest|g" "${DEFAULT_IMAGES_FILE}"; then
-                  handle_repo_error "${repo_name}" "Failed to update openstack-ansibleee-runner in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
-                fi
-                if ! sed -i -E "s|(quay\.io/openstack-k8s-operators/openstack-baremetal-operator-agent):latest|\1:${BRANCH_NAME}-latest|g" "${DEFAULT_IMAGES_FILE}"; then
-                  handle_repo_error "${repo_name}" "Failed to update openstack-baremetal-operator-agent in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
-                fi
-                if ! sed -i -E "s|(quay\.io/openstack-k8s-operators/openstack-must-gather):latest|\1:${BRANCH_NAME}-latest|g" "${DEFAULT_IMAGES_FILE}"; then
-                  handle_repo_error "${repo_name}" "Failed to update openstack-must-gather in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
-                fi
+                for image in openstack-ansibleee-runner openstack-baremetal-operator-agent openstack-must-gather \
+                             mysqld_exporter sg-core prometheus-podman-exporter; do
+                  if ! sed -i -E "s|(quay\.io/openstack-k8s-operators/${image}):[A-Za-z0-9._-]+|\1:${BRANCH_NAME}-latest|g" "${DEFAULT_IMAGES_FILE}"; then
+                    handle_repo_error "${repo_name}" "Failed to update ${image} in ${DEFAULT_IMAGES_FILE}" "$TEMP_DIR"
+                  fi
+                done
 
                 # Commit default_images.yaml changes if any
                 if ! git diff --quiet -- "${DEFAULT_IMAGES_FILE}"; then

@@ -59,7 +59,8 @@ Common scripts and tools for the openstack-k8s-operators CI that can be used ins
 
 | Script | Description |
 |--------|-------------|
-| `switch_prow_jobs_fr_branch.sh` | Creates openshift/release Prow job configs for a new FR branch. Usage: `./switch_prow_jobs_fr_branch.sh <old-fr> <new-fr>` |
+| `switch_prow_jobs_fr_branch.sh` | Replaces Prow configs for an older FR branch with a newer FR branch. Usage: `./switch_prow_jobs_fr_branch.sh <old-fr> <new-fr>` |
+| `add_prow_jobs_feature_branch.sh` | Copies Prow job configs from a template branch to a target branch, preserving the template branch. Supports repeated `--exclude-repo <repo>` options for repos without the target branch. |
 | `renovate.sh` | Runs self-hosted Renovate to create dependency update PRs. Requires GitHub App credentials. See [setup docs](docs/renovate-github-app-setup.md). |
 | `stage_downstream_rebase.sh` | Stages downstream rebase for operator bundles against the Red Hat registry. |
 | `build-tools-image.sh` | Builds the CI build-tools container image (`openstack-k8s-operators-ci-build-tools`). |

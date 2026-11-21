@@ -123,7 +123,7 @@ jobs:
 
     steps:
     - name: Install Go
-      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
       with:
         go-version: ${{ inputs.go_version }}
         cache: false
@@ -132,7 +132,7 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
     - name: Install operator-sdk
-      uses: redhat-actions/openshift-tools-installer@1f130822bb0930e0ee02a119adcc3271a22b1499 # v3
+      uses: redhat-actions/openshift-tools-installer@bf1d8fd8fa963cff1d33688473e51f948748991e # v3
       with:
         source: github
         operator-sdk: ${{ inputs.operator_sdk_version }}
@@ -213,7 +213,7 @@ jobs:
 
     steps:
     - name: Install Go
-      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
       with:
         go-version: ${{ inputs.go_version }}
         cache: false
@@ -230,7 +230,7 @@ jobs:
         echo "latesttag=${latesttag@L}" >> $GITHUB_ENV
 
     - name: Install opm
-      uses: redhat-actions/openshift-tools-installer@1f130822bb0930e0ee02a119adcc3271a22b1499 # v3
+      uses: redhat-actions/openshift-tools-installer@bf1d8fd8fa963cff1d33688473e51f948748991e # v3
       with:
         source: github
         opm: 'latest'

@@ -1,9 +1,8 @@
-FROM registry.access.redhat.com/ubi10/ubi:latest
+FROM registry.access.redhat.com/ubi10/go-toolset:1.26.10
 
 # Tool versions from Makefile (only for pre-built binaries)
 ENV KUSTOMIZE_VERSION=v5.6.0
 ENV KUTTL_VERSION=0.17.0
-ENV GOTOOLCHAIN_VERSION=go1.26.4
 ENV OC_VERSION=4.16.0
 ENV OPERATOR_SDK_VERSION=v1.42.3
 ENV GOLANGCI_LINT_VERSION=v2.12.2
@@ -14,10 +13,16 @@ ENV OPM_VERSION=v1.74.0
 ENV WORKSPACE_DIR=/tmp/workspace
 ENV LOCALBIN=${WORKSPACE_DIR}/bin
 ENV PATH=${LOCALBIN}:$PATH
+ENV GOBIN=${LOCALBIN}
+
+# go-toolset defaults to USER 1001; dnf and the tool installs below need root
+# (the previous ubi10/ubi base ran as root, so CI keeps expecting that)
+USER root
 
 # Install system dependencies
 # First install essential tools, then swap curl packages
-RUN dnf update -y && \
+# Update everything except the Go toolchain pinned by the base image
+RUN dnf update -y --exclude='golang*' --exclude='go-toolset' && \
     dnf install -y \
         tar \
         gzip \
@@ -32,12 +37,6 @@ RUN dnf update -y && \
 
 # Create workspace and bin directory
 RUN mkdir -p ${LOCALBIN}
-
-# Install Go with specified version
-RUN curl -fsSL https://dl.google.com/go/${GOTOOLCHAIN_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xz
-ENV PATH=/usr/local/go/bin:$PATH
-ENV GOPATH=/go
-ENV GOBIN=${LOCALBIN}
 
 # Install kustomize
 RUN curl -Ss "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | \
@@ -81,7 +80,7 @@ WORKDIR /workspace
 
 # Verify installations
 RUN echo "=== Tool Versions ===" && \
-    echo "Go: $(go version)" && \
+    go env GOVERSION | grep -q "^go1\.26\.10\b" && echo "Go: $(go version)" && \
     echo "Kustomize: $(kustomize version --short)" && \
     echo "Kubectl-kuttl: $(kubectl-kuttl version)" && \
     echo "Operator-SDK: $(operator-sdk version)" && \

@@ -42,6 +42,11 @@ on:
         required: false
         type: boolean
         default: true
+      UPDATE_S2I_CONTAINERS:
+        description: 'Create branch and update matrix in s2i-openstack-containers'
+        required: true
+        type: boolean
+        default: false
       RETAG_RABBITMQ_OPERATOR:
         description: 'Enable retag-and-push-rabbitmq-cluster-operator-index'
         required: false
@@ -896,3 +901,16 @@ jobs:
       IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+
+  create-s2i-containers-repo-branch:
+    # Only run if not a dry run, parameter is enabled, and create-branches job succeeded
+    if: inputs.DRY_RUN == false && inputs.UPDATE_S2I_CONTAINERS && needs.create-branches.result == 'success'
+    needs: create-branches
+    uses: ./.github/workflows/create-s2i-containers-repo-branch.yaml
+    with:
+      source_branch: ${{ inputs.SOURCE_BRANCH }}
+      new_branch: ${{ inputs.BRANCH_NAME }}
+    secrets:
+      gh-token-app-id: ${{ secrets.APP_ID }}
+      gh-token-private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      gh-token-owner: ${{ env.ORG_NAME }}

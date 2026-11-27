@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Comma-separated list of active branches (e.g., main,18-stable,18.0-fr6)'
+        description: 'Comma-separated list of active branches (e.g., main,18-stable,18.0-fr7,19.0-beta)'
         required: true
         type: string
       dry_run:

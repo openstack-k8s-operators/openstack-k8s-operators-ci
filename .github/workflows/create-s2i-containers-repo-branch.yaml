@@ -1,0 +1,130 @@
+# .github/workflows/create-s2i-containers-repo-branch.yaml
+
+name: Create release branch in s2i-openstack-operators
+
+# This workflow can be triggered manually or called by another workflow
+on:
+  # Allow manual execution from the Actions tab
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: "The source branch to branch from"
+        required: true
+        type: string
+      new_branch:
+        description: "The new branch to be created (e.g., 18.0-fr4-latest)"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform a dry run without actually pushing the image"
+        required: false
+        type: boolean
+        default: false
+
+  # Allow this workflow to be called by another workflow
+  workflow_call:
+    inputs:
+      source_branch:
+        description: "The source branch to branch from"
+        required: true
+        type: string
+      new_branch:
+        description: "The new branch to be created (e.g., 18.0-fr4-latest)"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform a dry run without actually pushing the image"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      gh-token-app-id:
+        required: true
+      gh-token-key:
+        required: true
+      gh-token-owner:
+        required: true
+
+env:
+  ORG_NAME: ${{ github.repository_owner }}
+  DRY_RUN: ${{ inputs.dry_run }}
+  BRANCH_NAME: ${{ inputs.new_branch }}
+  SOURCE_BRANCH: ${{ inputs.source_branch }}
+
+permissions:
+  contents: read
+
+jobs:
+  create-s2i-repo-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate a token from the GitHub App
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.gh-token-app-id }}
+          private-key: ${{ secrets.gh-token-key }}
+          owner: ${{ secrets.gh-token-owner }}
+          repositories: |
+            s2i-openstack-containers
+
+      - name: Create branch in s2i-openstack-containers and expand update-sources matrix
+        if: inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          REPO="${ORG_NAME}/s2i-openstack-containers"
+          MATRIX_FILE=".github/workflows/update-sources.yml"
+          PR_BRANCH="add-${BRANCH_NAME}-to-update-sources-matrix"
+
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            echo "DRY_RUN: would create '${BRANCH_NAME}' in ${REPO} and open a PR adding it to ${MATRIX_FILE}"
+            exit 0
+          fi
+
+          WORK_DIR=$(mktemp -d)
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "${WORK_DIR}/repo"
+          cd "${WORK_DIR}/repo"
+          git config user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+          git config user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+          # 1) Create BRANCH_NAME from SOURCE_BRANCH (skip if it already exists)
+          if git ls-remote --exit-code --heads origin "${BRANCH_NAME}" >/dev/null 2>&1; then
+            echo "Branch '${BRANCH_NAME}' already exists in ${REPO}"
+          else
+            git fetch origin "${SOURCE_BRANCH}"
+            git checkout -b "${BRANCH_NAME}" FETCH_HEAD
+            git push origin "${BRANCH_NAME}"
+          fi
+
+          # 2) Branch for the matrix PR (based on main, not the new release branch)
+          git checkout -B "${PR_BRANCH}" origin/main
+
+          # 3) Append BRANCH_NAME to the 'branch' matrix of the update-sources job
+          #    (bracket notation: the job id contains a hyphen)
+          MATRIX_PATH='.jobs["update-sources"].strategy.matrix.branch'
+
+          # skip if the branch is already listed
+          if yq -e "${MATRIX_PATH} | contains([strenv(BRANCH_NAME)])" "${MATRIX_FILE}" >/dev/null; then
+            echo "'${BRANCH_NAME}' already in the matrix, nothing to do"
+            exit 0
+          fi
+
+          yq -i "${MATRIX_PATH} += [strenv(BRANCH_NAME)]" "${MATRIX_FILE}"
+
+          # confirm the append actually happened
+          yq -e "${MATRIX_PATH} | contains([strenv(BRANCH_NAME)])" "${MATRIX_FILE}" >/dev/null || {
+            echo "::error::failed to append '${BRANCH_NAME}' to ${MATRIX_PATH}"
+            exit 1
+          }
+
+          git commit -m "Add ${BRANCH_NAME} to update-sources matrix"
+          git push origin "${PR_BRANCH}"
+
+          # 4) Open the PR against main
+          gh pr create -R "${REPO}" \
+            --base main --head "${PR_BRANCH}" \
+            --title "Add ${BRANCH_NAME} to update-sources matrix" \
+            --body "Adds \`${BRANCH_NAME}\` to the branch matrix of the \`update-sources\` job so sources are kept updated on the new branch."

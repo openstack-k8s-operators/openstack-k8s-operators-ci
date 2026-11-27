@@ -39,6 +39,7 @@ This is done once when development shifts to the next major version.
 | CREATE_RELEASE_BRANCHES | `true` | |
 | UPDATE_OPENSTACK_OPERATOR | `true` | Bumps version on main |
 | UPDATE_CI_WORKFLOWS | `true` | Updates force-bump matrix |
+| UPDATE_S2I_CONTAINERS | `true` | Creates release branch in s2i-openstack-containers |
 | RETAG_RABBITMQ_OPERATOR | `false` | Not needed for stable branch |
 
 **What the workflow does:**
@@ -48,6 +49,8 @@ This is done once when development shifts to the next major version.
 4. Updates `renovate.json` on `18-stable` to extend `18-stable.json5` instead of `default.json5`
 5. Creates a PR on `main` in openstack-operator bumping `VERSION` to `19.0.0`
 6. Creates a PR in openstack-k8s-operators-ci updating force-bump-branches matrix
+7. Creates `18-stable` branch from `main` in [`s2i-openstack-containers`](https://github.com/openstack-k8s-operators/s2i-openstack-containers)
+8. Creates a PR in s2i-openstack-containers extending update-sources workflow matrix with `18-stable`
 
 **Manual prerequisite:**
 - Create `18-stable.json5` in the `renovate-config` repo before running the workflow. Copy from `default.json5` and adjust dependency bounds for the RHOSO 18 OCP target.
@@ -77,6 +80,7 @@ current model — same as what we did for FR6 and earlier.
 | CREATE_RELEASE_BRANCHES | `true` | |
 | UPDATE_OPENSTACK_OPERATOR | `true` | |
 | UPDATE_CI_WORKFLOWS | `true` | |
+| UPDATE_S2I_CONTAINERS | `false` | |
 | RETAG_RABBITMQ_OPERATOR | `true` | |
 
 **What the workflow does:**
@@ -104,6 +108,7 @@ Creates a new RHOSO 18 feature release branch from `18-stable`.
 | CREATE_RELEASE_BRANCHES | `true` | |
 | UPDATE_OPENSTACK_OPERATOR | `true` | Version bump PR targets 18-stable |
 | UPDATE_CI_WORKFLOWS | `true` | |
+| UPDATE_S2I_CONTAINERS | `false` | |
 | RETAG_RABBITMQ_OPERATOR | `true` | |
 
 **What the workflow does:**
@@ -167,6 +172,9 @@ Script added via https://github.com/openstack-k8s-operators/openstack-k8s-operat
 
 Add the new branch to the Zuul default branches config.
 Example: https://gitlab.com/softwarefactory-project/config/-/merge_requests/118
+
+Also if the branch was created in s2i-opentack-containers as well, enable CI for such branch.
+Example: https://review.rdoproject.org/r/c/config/+/59111/4/zuul.d/projects.yaml
 
 Ping eod-pcinfra in #rhos-prodchain-discuss on slack for a review and get it merged.
 
